@@ -39,7 +39,7 @@ CONFIG_FILE = 'gui_config.json'
 MAX_LOG_LINES = 500
 
 # ---- 参数表：(键, 中文名)。时间参数 UI 上用毫秒，内部转秒 ----
-PAIR_PARAMS = [                      # (min, max) 区间参数
+PAIR_PARAMS = [                      # (min, max) 区间参数，UI 用毫秒
     ('jump_hold_secs', '跳跃键按住'),
     ('jump_rise_secs', '腾空等待'),
     ('key_hold_secs', '攻击键按住'),
@@ -49,6 +49,10 @@ PAIR_PARAMS = [                      # (min, max) 区间参数
     ('switch_gap_secs', '换边间隔'),
     ('idle_secs', '发呆时长'),
     ('potion_pause_secs', '喝药后停顿'),
+    ('buff_pause_secs', 'Buff后停顿'),
+]
+SEC_PAIR_PARAMS = [                  # 秒级区间参数（数值大，不用毫秒）
+    ('buff_every_secs', 'Buff间隔'),
 ]
 INT_PARAMS = [                       # 整数参数
     ('attacks_per_side', '每边攻击次数'),
@@ -60,16 +64,21 @@ PCT_PARAMS = [                       # 概率参数，UI 用 %
     ('hop_prob', '纯跳一下%'),
     ('idle_prob', '轮间发呆%'),
 ]
-KEY_PARAMS = [('attack_key', '攻击键'), ('jump_key', '跳跃键'), ('potion_key', '喝药键')]
+KEY_PARAMS = [('attack_key', '攻击键'), ('jump_key', '跳跃键'),
+              ('potion_key', '喝药键'), ('buff_key', 'Buff键')]
 
 
 def _defaults():
     c = Config()
     d = {'window_title': c.window_title, 'plan': c.plan,
-         'potion_enabled': c.potion_key is not None}
+         'potion_enabled': c.potion_key is not None,
+         'buff_enabled': c.buff_key is not None}
     for k, _ in PAIR_PARAMS:
         lo, hi = getattr(c, k)
         d[k + '_min'], d[k + '_max'] = str(int(lo * 1000)), str(int(hi * 1000))
+    for k, _ in SEC_PAIR_PARAMS:
+        lo, hi = getattr(c, k)
+        d[k + '_min'], d[k + '_max'] = f'{lo:g}', f'{hi:g}'
     for k, _ in INT_PARAMS:
         d[k] = str(getattr(c, k))
     for k, _ in PCT_PARAMS:
@@ -107,14 +116,14 @@ class App(tk.Tk):
         self.vars[name] = tk.StringVar(value=str(value))
         return self.vars[name]
 
-    def _row_pair(self, parent, row, label, key):
+    def _row_pair(self, parent, row, label, key, unit='ms'):
         d = _defaults()
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky='e', padx=4, pady=2)
         f = ttk.Frame(parent)
         ttk.Entry(f, width=6, textvariable=self._var(key + '_min', d[key + '_min'])).pack(side='left')
         ttk.Label(f, text='~').pack(side='left')
         ttk.Entry(f, width=6, textvariable=self._var(key + '_max', d[key + '_max'])).pack(side='left')
-        ttk.Label(f, text='ms').pack(side='left')
+        ttk.Label(f, text=unit).pack(side='left')
         f.grid(row=row, column=1, sticky='w', padx=4, pady=2)
 
     def _row_single(self, parent, row, label, key, unit=''):
@@ -136,15 +145,19 @@ class App(tk.Tk):
         ttk.Combobox(top, width=22, state='readonly', textvariable=self.vars['plan'],
                      values=list(plans.PLANS)).grid(row=1, column=1, sticky='w', padx=4)
 
-        keys = ttk.LabelFrame(self, text='按键（小写键名，如 shift/alt/end/a）')
+        keys = ttk.LabelFrame(self, text='按键（小写键名，如 shift/alt/home/end/a）')
         keys.grid(row=1, column=0, sticky='we', padx=8, pady=2)
         for i, (k, label) in enumerate(KEY_PARAMS):
             ttk.Label(keys, text=label).grid(row=i, column=0, sticky='e', padx=4, pady=2)
             ttk.Entry(keys, width=10, textvariable=self._var(k, _defaults()[k])).grid(
                 row=i, column=1, sticky='w', padx=4)
-        self.potion_on = tk.BooleanVar(value=False)
+        self.potion_on = tk.BooleanVar(value=_defaults()['potion_enabled'])
         ttk.Checkbutton(keys, text='启用喝药', variable=self.potion_on).grid(
-            row=3, column=0, columnspan=2, sticky='w', padx=4)
+            row=4, column=0, columnspan=2, sticky='w', padx=4)
+        self.buff_on = tk.BooleanVar(value=_defaults()['buff_enabled'])
+        ttk.Checkbutton(keys, text='启用定时Buff（每隔一段时间按一次Buff键）',
+                        variable=self.buff_on).grid(
+            row=5, column=0, columnspan=2, sticky='w', padx=4)
 
         rhythm = ttk.LabelFrame(self, text='节奏参数（毫秒，随机区间）')
         rhythm.grid(row=1, column=1, sticky='nw', padx=8, pady=2)
@@ -165,10 +178,11 @@ class App(tk.Tk):
         for k, label in PCT_PARAMS:
             self._row_single(rnd, r, label, k, '%'); r += 1
 
-        extra = ttk.LabelFrame(self, text='喝药 / 站桩方案')
+        extra = ttk.LabelFrame(self, text='喝药 / Buff / 站桩方案')
         extra.grid(row=3, column=0, sticky='nw', padx=8, pady=2)
         self._row_single(extra, 0, INT_PARAMS[1][1], INT_PARAMS[1][0], '下')
         self._row_single(extra, 1, INT_PARAMS[2][1], INT_PARAMS[2][0], '次')
+        self._row_pair(extra, 2, SEC_PAIR_PARAMS[0][1], SEC_PAIR_PARAMS[0][0], '秒')
 
         vis = ttk.LabelFrame(self, text='截图判断（名字牌找主角，防掉下去）')
         vis.grid(row=3, column=1, sticky='nw', padx=8, pady=2)
@@ -215,6 +229,7 @@ class App(tk.Tk):
     def _snapshot(self):
         return ({k: v.get() for k, v in self.vars.items()}
                 | {'potion_enabled': self.potion_on.get(),
+                   'buff_enabled': self.buff_on.get(),
                    'vision_enabled': self.vision_on.get()})
 
     def _save(self):
@@ -235,6 +250,8 @@ class App(tk.Tk):
         for k, v in data.items():
             if k == 'potion_enabled':
                 self.potion_on.set(bool(v))
+            elif k == 'buff_enabled':
+                self.buff_on.set(bool(v))
             elif k == 'vision_enabled':
                 self.vision_on.set(bool(v))
             elif k in self.vars:
@@ -245,16 +262,21 @@ class App(tk.Tk):
     def _build_config(self):
         g = lambda k: self.vars[k].get().strip()
         ms = lambda k: (float(g(k + '_min')) / 1000.0, float(g(k + '_max')) / 1000.0)
+        sec = lambda k: (float(g(k + '_min')), float(g(k + '_max')))
         opt_int = lambda k: (int(g(k)) if g(k) else None)
         if float(g('jump_rise_secs_min')) > float(g('jump_rise_secs_max')):
             raise ValueError('腾空等待最小值不能大于最大值')
+        if float(g('buff_every_secs_min')) > float(g('buff_every_secs_max')):
+            raise ValueError('Buff间隔最小值不能大于最大值')
         potion = g('potion_key').lower() if self.potion_on.get() else ''
+        buff = g('buff_key').lower() if self.buff_on.get() else ''
         return Config(
             window_title=g('window_title') or '冒险岛怀旧服',
             plan=g('plan'),
             attack_key=g('attack_key').lower() or 'shift',
             jump_key=g('jump_key').lower() or 'alt',
             potion_key=potion or None,
+            buff_key=buff or None,
             attacks_per_side=int(g('attacks_per_side')),
             jump_hold_secs=ms('jump_hold_secs'),
             jump_rise_secs=ms('jump_rise_secs'),
@@ -265,6 +287,8 @@ class App(tk.Tk):
             switch_gap_secs=ms('switch_gap_secs'),
             potion_every=int(g('potion_every')),
             potion_pause_secs=ms('potion_pause_secs'),
+            buff_every_secs=sec('buff_every_secs'),
+            buff_pause_secs=ms('buff_pause_secs'),
             extra_attack_prob=int(g('extra_attack_prob')) / 100.0,
             hop_prob=int(g('hop_prob')) / 100.0,
             idle_prob=int(g('idle_prob')) / 100.0,

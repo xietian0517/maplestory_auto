@@ -26,6 +26,26 @@ class Every:
         return self.count % self.n == 0
 
 
+class Interval:
+    """每隔一段时间触发一次（时长随机），用于加 Buff 这类定时动作。
+
+    首次到点 = 创建后 rng 秒；之后每次触发自动排下一次随机间隔。
+    循环里每轮问一句 interval.due() 即可，问得勤也不会误触发。
+    """
+
+    def __init__(self, rng):
+        self.rng = rng
+        self.next_at = time.monotonic() + rnd(rng)
+
+    def due(self):
+        """到点返回 True 并自动排下一次；没到点返回 False。"""
+        now = time.monotonic()
+        if now >= self.next_at:
+            self.next_at = now + rnd(self.rng)
+            return True
+        return False
+
+
 # ---------- 基础积木 ----------
 
 def tap(bot, key, hold_rng):
@@ -92,5 +112,13 @@ def drink_potion(bot, key, hold_rng, pause_rng, name='回蓝'):
     """喝一瓶药，喝完停一下。"""
     bot.gate()
     bot.log(f'[{name}] 喝药1瓶')
+    bot.tap(key, rnd(hold_rng))
+    wait(bot, pause_rng)
+
+
+def cast_buff(bot, key, hold_rng, pause_rng, name='加Buff'):
+    """按一下 Buff 键（默认 Home），按完停一下等技能动作播完。"""
+    bot.gate()
+    bot.log(f'[{name}] 按 {key}')
     bot.tap(key, rnd(hold_rng))
     wait(bot, pause_rng)

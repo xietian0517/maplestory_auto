@@ -21,6 +21,17 @@ def random_sides():
     return first, second
 
 
+def make_buff(cfg):
+    """配置了 Buff 键就返回一个定时器，否则 None。"""
+    return B.Interval(cfg.buff_every_secs) if cfg.buff_key else None
+
+
+def maybe_buff(bot, cfg, buff):
+    """每轮开头问一句：到点了就按一下 Buff 键。"""
+    if buff is not None and buff.due():
+        B.cast_buff(bot, cfg.buff_key, cfg.key_hold_secs, cfg.buff_pause_secs)
+
+
 class BalancedDeck:
     """平衡牌堆：每 pair_count 轮（=2*pair_count 次攻击）洗一副牌。
 
@@ -57,9 +68,11 @@ def fixed_jump(bot, cfg):
     左右移动共用同一个随机时长，打完两边正好回原位；移动本身就是防检测微调。
     """
     potion = B.Every(cfg.potion_every) if cfg.potion_key else None
+    buff = make_buff(cfg)
     round_no = 0
     while True:
         round_no += 1
+        maybe_buff(bot, cfg, buff)
         move_secs = B.rnd(cfg.move_secs)          # 本轮左右共用同一时长，保证回原位
         for side in SIDES:                        # 固定先右后左，各一次
             B.move(bot, side, move_secs)
@@ -86,9 +99,11 @@ def random_jump(bot, cfg):
     每轮左右移动仍共用同一随机时长，保证回原位不漂移。
     """
     potion = B.Every(cfg.potion_every) if cfg.potion_key else None
+    buff = make_buff(cfg)
     round_no = 0
     while True:
         round_no += 1
+        maybe_buff(bot, cfg, buff)
         move_secs = B.rnd(cfg.move_secs)
         for side in random_sides():
             B.move(bot, side, move_secs)
@@ -154,9 +169,11 @@ def vision_jump(bot, cfg):
         return random_jump(bot, cfg)
 
     potion = B.Every(cfg.potion_every) if cfg.potion_key else None
+    buff = make_buff(cfg)
     direction, rescue, next_shot, misses, round_no = None, False, 0.0, 0, 0
     while True:
         round_no += 1
+        maybe_buff(bot, cfg, buff)
         if time.monotonic() >= next_shot:
             next_shot = time.monotonic() + cfg.vision_interval
             direction, rescue, misses = _look(bot, finder, cfg, direction, misses)
@@ -187,7 +204,9 @@ def static_cast(bot, cfg):
     move_secs = B.rnd(cfg.move_secs)
     cast_count = 0
     potion = B.Every(cfg.potion_every) if cfg.potion_key else None
+    buff = make_buff(cfg)
     while True:
+        maybe_buff(bot, cfg, buff)
         B.attack_once(bot, cfg.attack_key, cfg.key_hold_secs, f'[施法 {cast_count + 1}]')
         B.wait(bot, cfg.attack_gap_secs)
         cast_count += 1
