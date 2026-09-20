@@ -1,2 +1,0 @@
-# Optional dependency for static x64 disassembly.
-capstone>=5,<6

@@ -19,7 +19,7 @@
 ## 还没实现
 
 - 不识别怪物、不寻路、不认地图名、不自动爬绳/走传送门
-- 不读游戏内存里的坐标（只读内存这条路被客户端挡住了，见 [MEMORY.md](MEMORY.md)）
+- 不读游戏内存里的坐标（试过只读内存这条路，被客户端挡住了，已放弃）
 - 切地图、改窗口分辨率或缩放后需要重新标定；模板匹配只认标定时的画面尺寸
 
 ## 快速开始
@@ -154,8 +154,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-36 个用例：名字牌定位与坐标、左右判断与贴边、方案行为（一轮只走一个方向、同侧不换向、跨中线才换），
-以及实验分支里的视觉、内存、IL2CPP 元数据解析用例。
+14 个用例：名字牌定位与坐标、左右判断与贴边、方案行为（一轮只走一个方向、同侧不换向、跨中线才换）。
 
 ## 仓库结构
 
@@ -170,16 +169,4 @@ autofarm/
 assets/                  标定产物（名字牌模板等），不进版本库
 MapleFarmVision.spec     PyInstaller 打包配置（MapleFarmGUI.spec 只差一个 exe 名字）
 tests/                   单元测试
-maplebot/ analysis/      实验分支，见下
 ```
-
-## 附：实验分支（未实机验证）
-
-这两块是早期尝试，代码在仓库里但**没有真机验证**，别当成可用功能：
-
-- `maplebot/`：完整视觉版——截图 → 模板匹配找角色/怪物 → 小地图轮廓与黄点 → 同层寻怪与路线巡逻 →
-  按职业选技能 → SendInput。需要标定 `scene`/`minimap`/`player`/`monster` 四份模板，
-  只跑过合成图片的离线测试，没有在真实客户端上验证识别与按键效果
-- `maplebot/memory.py`、`metadata.py`、`method_analysis.py`、`analysis/`：只读内存读取与 IL2CPP
-  静态分析。静态结构分析完成了一轮，但实测 `ReadProcessMemory` 连续失败、没有拿到任何游戏对象数据，
-  详见 [MEMORY.md](MEMORY.md) 和 [ANALYSIS.md](ANALYSIS.md)
