@@ -1,100 +1,185 @@
-# 冒险岛视觉脚本
+# 冒险岛怀旧服挂机脚本
 
-怀旧版内存读取开发与实测阻塞情况见 [MEMORY.md](MEMORY.md)。目前已实现底层只读模块和诊断工具，尚未取得游戏对象数据，视觉版仍是现有运行入口。
+模拟玩家的键盘输入，按设定节奏跳起来攻击；同时每隔几秒截一张游戏画面，用**名字牌**认出主角
+在平台的左半边还是右半边，决定接下来往哪边打，避免越打越靠边掉下去。
 
-Windows / Python 3.10+。截图 → 模板检测 → 寻怪/巡逻 → 按职业选择技能 → Windows SendInput。
+只用两种手段：**SendInput 发按键** + **截图做模板匹配**。不读内存、不注入、不改客户端。
 
-这是需要客户端标定的可运行基础版。没有附带真实游戏素材，也没有完成实机验证；不能开箱即用识别所有地图或所有职业。已实现角色、怪物位置检测、小地图边缘轮廓与黄色玩家点检测、同层寻怪、配置路线移动、通用技能配置。地图轮廓只是边缘图，不等于完整地图几何、碰撞信息或自动跨平台寻路；当前不识别地图名称和地图 ID。切换地图后先暂停并重新标定。
+## 目前实现了什么
 
-## 启动
-
-当前目录已安装 `.venv` 依赖，并已创建 `config.json`，可以直接开始编辑配置和标定。只有配置不存在时才运行下面的初始化命令：
-
-```powershell
-cd E:\work\mxd
-.\.venv\Scripts\python.exe -m maplebot init
-```
-
-新机器安装：`python -m venv .venv`，然后 `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`。
-
-编辑 `config.json` 的 `window_title`，填实际游戏窗口标题的一段唯一文字（支持中文）。使用窗口模式，保持分辨率、缩放不变，窗口需要完整可见。按以下步骤准备素材：
-
-```powershell
-# 3 秒内把游戏切到前台，保存客户区截图
-.\.venv\Scripts\python.exe -m maplebot capture
-# 每次框选后按 Enter 确认，Esc 取消
-.\.venv\Scripts\python.exe -m maplebot calibrate scene
-.\.venv\Scripts\python.exe -m maplebot calibrate minimap
-.\.venv\Scripts\python.exe -m maplebot calibrate player
-.\.venv\Scripts\python.exe -m maplebot calibrate monster
-```
-
-- `scene`：只框游戏战斗画面，尽量排除小地图、聊天栏、快捷栏。
-- `minimap`：只框小地图的地图内容，排除标题、按钮和边框。
-- `player`：紧密框选自己的角色或独有名牌。建议使用角色整体，模板中心作为攻击距离的参考点。名牌模板需要相应调整技能距离。
-- `monster`：紧密框选怪物。同一种怪物可重复添加不同动画帧；多种怪物分别添加。左右镜像自动支持。
-- 多次 `capture --output captures/another.png` 后，可用 `calibrate player --image captures/another.png` 添加其他动作帧。使用相同窗口尺寸。
-
-先离线检查，再打开实时预览：
-
-```powershell
-.\.venv\Scripts\python.exe -m maplebot analyze
-.\.venv\Scripts\python.exe -m maplebot run --preview
-```
-
-`analyze` 保存 `captures/analysis.png` 和小地图轮廓图，同时输出位置与动作 JSON。绿色表示角色，红色表示怪物。实时预览要放在游戏窗口之外，不能遮住游戏。默认运行只模拟决策，不发送按键。
-
-确认识别后：
-
-```powershell
-.\.venv\Scripts\python.exe -m maplebot run --live
-```
-
-实际按键模式初始暂停。切到游戏后 **F8 开始/暂停，F9 退出**。失去游戏焦点会松开按键并暂停，回到游戏后需重新按 F8。角色未检测到或有多个近似匹配时不操作；移动卡住会停止，F8 暂停再开启可以重置。异常退出会释放本程序按下的键。
-
-## 职业和攻击技能
-
-将 `profile` 改成 `mage`、`warrior`、`archer` 或自行新增的职业名称。示例仅演示键位和规则，**所有距离、冷却和技能名称均需按客户端实测校准**，并非游戏数据库。SHIFT/CTRL 只是用户指定的键位。
-
-每个技能支持：
-
-| 字段 | 含义 |
+| 能力 | 说明 |
 | --- | --- |
-| `name` / `key` | 唯一技能名 / 游戏内绑定按键 |
-| `range_x` / `range_y` | 战斗画面内两个模板中心之间允许的横向/纵向像素距离 |
-| `directional` | 是否必须先面向目标 |
-| `priority` | 数值越大越先尝试 |
-| `cooldown` | 两次技能启动的最短间隔，秒 |
-| `hold` | 按住技能键的时间，秒，最多 0.5 |
-| `recovery` | 松键后的动作等待时间，秒 |
+| 模拟键盘输入 | 方向键/跳跃键/攻击键的按下与抬起全走 Windows SendInput，只在游戏窗口处于前台时发送 |
+| 节奏化攻击 | 移动时长、出手间隔、按住时长、轮间间隔、喝药间隔都是可调的随机区间 |
+| 位置判断 | 每 4 秒（可调）截一张客户区画面，用名字牌模板匹配主角的 x。实测真名牌得分 1.00、同图聊天栏文字只有 0.61，阈值很好分 |
+| 攻击方向跟随位置 | 在右半边就一直往左打、在左半边就一直往右打；跨过中线才换方向，不做「左一下右一下」 |
+| 不走出平台 | 离平台两端不足设定像素时算贴边，按倍数多挪一段回中间，挪完立刻重新确认 |
+| 安全兜底 | 启动即暂停；游戏不在前台自动挂起、不发键；认不到名字牌就沿用上一次方向，不盲改；退出时抬起所有按键 |
 
-通用逻辑会寻找范围内可命中的目标，按优先级释放冷却结束的技能；有目标在范围内但技能未就绪时等待。没有读取 MP、技能等级、实际施放成功与服务端冷却，因此当前冷却属于本地计时。支持 `a`~`z`、`0`~`9`、`shift`、`ctrl`、`alt`、`space` 和四个方向键。F8/F9 保留。
+## 还没实现
 
-## 巡逻与上下移动
+- 不识别怪物、不寻路、不认地图名、不自动爬绳/走传送门
+- 不读游戏内存里的坐标（只读内存这条路被客户端挡住了，见 [MEMORY.md](MEMORY.md)）
+- 切地图、改窗口分辨率或缩放后需要重新标定；模板匹配只认标定时的画面尺寸
 
-同层有怪物时向怪物移动。没有同层目标时，按 `navigation.waypoints` 循环巡逻。坐标来自**小地图 ROI 左上角**，不是战斗画面坐标。玩家点默认用黄色 HSV 区间识别；若小地图有多个同色标记，脚本暂停路线移动，需要调整颜色范围/ROI。
+## 快速开始
 
-例如先走到梯子处，再上爬，最后返回。将下例坐标替换成你的地图坐标：
+### 用打包好的 exe
 
-```json
-"waypoints": [
-  {"x": 40, "y": 80},
-  {"x": 40, "y": 35, "vertical_keys": ["up"]},
-  {"x": 110, "y": 35},
-  {"x": 110, "y": 80, "vertical_keys": ["down", "space"]}
-]
+1. 双击 `dist\MapleFarmVision.exe`。会弹 UAC，点「是」——游戏是管理员权限，本程序权限低的话
+   按键会被 Windows（UIPI）静默丢弃，界面看着正常但游戏毫无反应
+2. 确认「方案」是 `vision_jump`，「名字模板」指向标定好的名字牌图片
+3. 点「试一下识别」先验证：截一张图，弹窗给出主角 x、匹配得分、接下来往哪边打，并画圈的图存到
+   `captures\vision_test.png`。这一步不发任何按键
+4. 点「启动（挂后台等F12）」→ 切回游戏窗口 → 按 **F12** 开始
+
+### 用源码
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe farm_gui.py     # 界面版，参数在界面上改
+.\.venv\Scripts\python.exe farm.py         # 控制台版，参数在 farm.py 顶部的 Config 里
 ```
 
-程序先横向对齐，再发送目标点指定的 `vertical_keys`；组合键同步按住。`space` 必须在游戏中绑定跳跃，`down+space` 的效果也取决于客户端。路线应逐段标定，不会自动识别梯子、传送门或计算跳跃轨迹。没有路线时，无目标就等待。
+源码运行时也要**用管理员权限打开终端**，理由同上。
 
-## 限制与验证
+## 界面与热键
 
-模板匹配受动画、遮挡、特效、换装和缩放影响；多补充真实帧模板并通过离线图检查。纵向距离只是同层的近似判断，不能判断障碍物和平台连通性。截图窗口被其他窗口遮挡也会影响识别。部分客户端可能不接受 SendInput 或截图结果为空，本程序不包含驱动或兼容绕过；出现这些情况需先诊断客户端兼容性。
+| 操作 | 说明 |
+| --- | --- |
+| 启动（挂后台等F12） | 绑定窗口、加载模板，然后一直暂停着等 F12 |
+| 开始挂机 / 暂停 | 和 F12 等效，切换运行状态 |
+| 停止 | 和 F11 等效，退出并抬起所有按键 |
+| 截屏标定 | 3 秒后截客户区，先后框选名字牌和平台范围，结果存进 `gui_config.json` |
+| 试一下识别 | 只截一张图试识别，不发送按键 |
+
+热键：**F12 开始/暂停，F11 退出**。运行中游戏窗口必须在最前面；切出去会自动挂起不发键，切回来按 F12 继续。
+日志区会打印每次判断，例如：
+
+```
+[截图] 名字牌 x=688（得分 1.00）在右半边 → 换方向，一直往左打
+[移动] 左 89ms   [第1轮]左跳攻(1/1)
+[截图] 名字牌 x=688（得分 1.00）在右半边 → 继续一直往左打
+```
+
+## 标定：告诉脚本哪个是你的名字
+
+位置判断靠名字牌，所以先要给一次标定：
+
+1. 游戏用**窗口模式**、窗口完整可见，标定后别改分辨率/缩放
+2. 点「截屏标定」，3 秒内切回游戏；它会自动截客户区
+3. 先用鼠标框住**自己的名字牌文字**（例如 `CatApril`），回车确认
+4. 再框住**平台可站立范围**（木板的左右两端），回车确认；按 Esc 可跳过，
+   跳过时就按整个画面判断左右（中心=画面中线，兜底也够用）
+5. 点「试一下识别」确认得分够高（>0.8 比较稳），有问题就重标一次
+
+名字牌模板就是标定那一刻截图里的一块像素，所以换机器、改分辨率、改名之后都要重标。
+标定产物放在程序目录的 `assets\` 下，不进版本库。
+
+## 挂机方案（plans）
+
+在界面「方案」里选，或在 `farm.py` 的 `Config.plan` 里改：
+
+| 方案 | 说明 |
+| --- | --- |
+| `vision_jump` | **推荐**。截图判断左右 → 单方向持续攻击 → 贴边回中间。需要标定名字牌 |
+| `random_jump` | 纯计时版：先后手随机，小概率多打一下 / 纯跳一下 / 发呆一会儿 |
+| `fixed_jump` | 纯计时版：固定先右后左各一次，打完回原位 |
+| `static_cast` | 站桩连打，每 N 下左右微调一次（示范怎么拼别的打法） |
+
+纯计时版不需要标定，也不会截图；没标定名字牌时 `vision_jump` 会自动退回 `random_jump`。
+
+## 参数
+
+界面里都能调，等价于 `gui_config.json` / `Config` 里的同名字段。时间类参数都是 `(最小, 最大)` 秒的随机区间。
+
+**位置判断（vision_jump 专用）**
+
+| 参数 | 默认 | 含义 |
+| --- | --- | --- |
+| `vision_enabled` | 开 | 关掉就退回纯计时打法，完全不截图 |
+| `name_template` | `assets/name_CatApril.png` | 名字牌模板路径（相对程序目录） |
+| `match_threshold` | `0.75` | 匹配阈值：真名牌≈1.0，聊天栏文字≈0.6 |
+| `vision_interval` | `4.0` 秒 | 隔多久截一张图。越大扫得越远，但也越容易冲过中线才掉头 |
+| `platform_left` / `platform_right` | 空 | 平台两端（客户区像素），标定得到；空=按整个画面判断 |
+| `edge_margin` | `60` px | 离两端不足这么多算贴边，方向一律指回中间 |
+| `rescue_scale` | `2.0` 倍 | 贴边那一轮的移动时长放大倍数（净往中间挪） |
+
+**节奏与按键**
+
+| 参数 | 默认 | 含义 |
+| --- | --- | --- |
+| `attack_key` / `jump_key` | `shift` / `alt` | 攻击键 / 跳跃键 |
+| `attacks_per_side` | `1` | 每一次移动后打几下 |
+| `move_secs` | 40~120 ms | 单次移动时长，决定每轮挪多远 |
+| `jump_hold_secs` | 40~80 ms | 跳跃键按住时长 |
+| `jump_rise_secs` | 30~50 ms | 起跳后等多久再出招（太快打地面就调大） |
+| `key_hold_secs` | 30~80 ms | 攻击键按住时长 |
+| `attack_gap_secs` | 250~450 ms | 两次跳攻之间的间隔（含落地） |
+| `settle_secs` | 30~60 ms | 移动后停稳等待 |
+| `switch_gap_secs` | 350~550 ms | 轮与轮之间的间隔 |
+| `potion_key` | 空（不喝药） | 喝药键，填了才生效 |
+| `potion_every` / `potion_pause_secs` | 15 下 / 0.6~1.2 秒 | 每多少下攻击喝一瓶、喝完停多久 |
+| `extra_attack_prob` / `hop_prob` / `idle_prob` | 15% / 5% / 8% | 仅 `random_jump`：多打一下 / 纯跳 / 发呆的概率 |
+| `micro_move_every` | 25 | 仅 `static_cast`：每多少下做一次左右微调 |
+
+## 工作原理与限制
+
+- **为什么用名字牌而不是人物模型**：名字牌是静态白字，不像角色贴图那样受动作帧、朝向、换装影响，
+  一次模板匹配就能定位；同一张图里聊天栏的白字只有 0.6 分左右，不会误命中
+- **方向规则**：判定在哪半边就往反方向打，跨过中线才换；所以每一步都朝远离她那一端的方向走，
+  越打越靠中间，再加上贴边回中的保护，不会走出平台
+- **截图要求游戏在前台且不被遮挡**（本来发按键也要求前台）；认不到名字牌时沿用上一次方向，
+  不会因为一次识别失败乱改方向
+- **只管左右不管上下**：掉到下层平台后不会自己爬回来
+- 客户端不处理 PostMessage 队列消息，只认 SendInput 系统级注入
+- 名字牌被特效遮挡、或贴到屏幕边缘被裁掉时可能匹配不到
+
+这类自动化通常违反在线游戏的用户协议，账号风险自负，请只在自己的机器和账号上使用。
+
+## 打包
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install pyinstaller
+.\.venv\Scripts\pyinstaller.exe --noconfirm MapleFarmVision.spec
+```
+
+- spec 里 `uac_admin=True`（启动自动请求管理员权限）、`console=False`
+- 图像匹配要带上 opencv+numpy，所以 exe 约 63 MB；`dist/`、`build/` 都不进版本库
+
+## 测试
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-测试覆盖职业选择、技能方向/优先级/冷却、角色丢失、上下路线、卡住停止，以及合成图片的多目标检测、坐标偏移和歧义拒绝。测试不代表真实客户端识别效果或按键已经验证。
+36 个用例：名字牌定位与坐标、左右判断与贴边、方案行为（一轮只走一个方向、同侧不换向、跨中线才换），
+以及实验分支里的视觉、内存、IL2CPP 元数据解析用例。
 
-实现参考：[OpenCV 模板匹配](https://docs.opencv.org/4.x/de/da9/tutorial_template_matching.html)、[MSS 截图示例](https://python-mss.readthedocs.io/latest/examples.html)。
+## 仓库结构
+
+```
+farm.py / farm_gui.py    挂机入口：控制台版 / 界面版
+autofarm/
+  winapi.py              Win32 封装：找窗口、SendInput、全局热键、权限与客户区查询
+  bot.py                 运行控制：F12/F11、失焦挂起、可打断等待、按键兜底释放
+  blocks.py              积木：移动、跳攻、连打、喝药、等待
+  plans.py               方案拼装：vision_jump / random_jump / fixed_jump / static_cast
+  vision.py              截图 + 名字牌匹配 + 左右判断
+assets/                  标定产物（名字牌模板等），不进版本库
+MapleFarmVision.spec     PyInstaller 打包配置（MapleFarmGUI.spec 只差一个 exe 名字）
+tests/                   单元测试
+maplebot/ analysis/      实验分支，见下
+```
+
+## 附：实验分支（未实机验证）
+
+这两块是早期尝试，代码在仓库里但**没有真机验证**，别当成可用功能：
+
+- `maplebot/`：完整视觉版——截图 → 模板匹配找角色/怪物 → 小地图轮廓与黄点 → 同层寻怪与路线巡逻 →
+  按职业选技能 → SendInput。需要标定 `scene`/`minimap`/`player`/`monster` 四份模板，
+  只跑过合成图片的离线测试，没有在真实客户端上验证识别与按键效果
+- `maplebot/memory.py`、`metadata.py`、`method_analysis.py`、`analysis/`：只读内存读取与 IL2CPP
+  静态分析。静态结构分析完成了一轮，但实测 `ReadProcessMemory` 连续失败、没有拿到任何游戏对象数据，
+  详见 [MEMORY.md](MEMORY.md) 和 [ANALYSIS.md](ANALYSIS.md)
