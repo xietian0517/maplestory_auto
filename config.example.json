@@ -1,0 +1,28 @@
+{
+  "window_title": "MapleStory",
+  "fps": 8,
+  "scene_roi": null,
+  "minimap_roi": null,
+  "player_templates": [],
+  "monster_templates": [],
+  "threshold": 0.86,
+  "minimap_player_hsv": [[20, 120, 160], [40, 255, 255]],
+  "profile": "mage",
+  "profiles": {
+    "mage": {
+      "skills": [
+        {"name": "雷电术", "key": "ctrl", "range_x": 130, "range_y": 65, "cooldown": 0.8, "hold": 0.09, "recovery": 0.55, "directional": false, "priority": 20},
+        {"name": "魔法双击", "key": "shift", "range_x": 230, "range_y": 40, "cooldown": 0.65, "hold": 0.09, "recovery": 0.5, "directional": true, "priority": 10}
+      ]
+    },
+    "warrior": {"skills": [{"name": "近战攻击", "key": "x", "range_x": 70, "range_y": 35, "cooldown": 0.6, "hold": 0.08, "recovery": 0.45, "directional": true, "priority": 10}]},
+    "archer": {"skills": [{"name": "远程攻击", "key": "x", "range_x": 300, "range_y": 35, "cooldown": 0.6, "hold": 0.08, "recovery": 0.45, "directional": true, "priority": 10}]}
+  },
+  "navigation": {
+    "same_floor_tolerance": 45,
+    "move_pulse": 0.12,
+    "stuck_seconds": 5,
+    "waypoint_tolerance": 4,
+    "waypoints": []
+  }
+}

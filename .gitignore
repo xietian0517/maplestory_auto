@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+assets/
+captures/
+config.json
+gui_config.json
+dist/
+build/
+冒险岛online/
+analysis/il2cpp/*.json
+*.exe
+*.7z
