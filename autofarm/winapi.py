@@ -30,10 +30,11 @@ VK_CODES = {
 }
 VK_CODES.update({chr(c): c - 32 for c in range(97, 123)})        # a-z
 VK_CODES.update({str(d): ord(str(d)) for d in range(10)})        # 0-9
+VK_CODES['ins'] = VK_CODES['insert']                             # Insert 别名
 
 # 扩展键：方向键、End/Home/Insert/Delete/PgUp/PgDn，SendInput 的 flags 要置扩展位
 EXTENDED_KEYS = {'left', 'up', 'right', 'down', 'end', 'home',
-                 'insert', 'delete', 'pgup', 'pgdn'}
+                 'insert', 'ins', 'delete', 'pgup', 'pgdn'}
 
 
 class _KeyboardInput(C.Structure):
