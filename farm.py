@@ -69,6 +69,8 @@ class Config:
     rescue_scale: float = 2.0             # 贴边那一轮移动时长放大倍数（净往中间挪）
     archer_profile: str = 'templates/rope_archer/profile.json'
     archer_player_name: str = ''           # 射手：留空匹配图片，填写角色名启用本地 OCR
+    archer_name_template: str = ''         # 玩家粘贴的名字图片，非空时优先使用
+    archer_template_owner: str = ''        # 粘贴时的角色名；改名后必须重新绑定
 
 
 def main():

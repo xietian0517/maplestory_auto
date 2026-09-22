@@ -95,6 +95,8 @@ def _defaults():
     d['rescue_scale'] = str(c.rescue_scale)
     d['archer_profile'] = c.archer_profile
     d['archer_player_name'] = c.archer_player_name
+    d['archer_name_template'] = c.archer_name_template
+    d['archer_template_owner'] = c.archer_template_owner
     return d
 
 
@@ -146,6 +148,8 @@ class App(tk.Tk):
         ttk.Label(top, text='方案').grid(row=1, column=0, sticky='e', padx=4, pady=2)
         self._var('plan', _defaults()['plan'])
         self._var('archer_player_name', _defaults()['archer_player_name'])
+        self._var('archer_name_template', _defaults()['archer_name_template'])
+        self._var('archer_template_owner', _defaults()['archer_template_owner'])
         ttk.Combobox(top, width=22, state='readonly', textvariable=self.vars['plan'],
                      values=list(plans.PLANS)).grid(row=1, column=1, sticky='w', padx=4)
         ttk.Button(top, text='载入绳边射手模板', command=self.on_archer_preset).grid(
@@ -279,6 +283,9 @@ class App(tk.Tk):
             raise ValueError('Buff间隔最小值不能大于最大值')
         potion = g('potion_key').lower() if self.potion_on.get() else ''
         buff = g('buff_key').lower() if self.buff_on.get() else ''
+        if g('plan') == 'rope_archer' and g('archer_name_template'):
+            from autofarm.custom_template import check_owner
+            check_owner(g('archer_player_name'), g('archer_template_owner'))
         return Config(
             window_title=g('window_title') or '冒险岛怀旧服',
             plan=g('plan'),
@@ -313,6 +320,8 @@ class App(tk.Tk):
             rescue_scale=float(g('rescue_scale')),
             archer_profile=g('archer_profile'),
             archer_player_name=g('archer_player_name'),
+            archer_name_template=g('archer_name_template'),
+            archer_template_owner=g('archer_template_owner'),
         )
 
     def on_archer_preset(self):
@@ -410,7 +419,8 @@ class App(tk.Tk):
         if cfg.plan == 'rope_archer':
             try:
                 from autofarm.rope_archer import RopeScene
-                scene = RopeScene(cfg.archer_profile, cfg.archer_player_name)
+                scene = RopeScene(cfg.archer_profile, cfg.archer_player_name,
+                                  cfg.archer_name_template, cfg.archer_template_owner)
                 frame = self._grab(cfg)
                 observation = scene.observe(frame)
                 folder = V.program_dir() / 'captures'

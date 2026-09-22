@@ -2,6 +2,7 @@
 __pycache__/
 assets/
 captures/
+user_templates/
 config.json
 gui_config.json
 /dist/*

@@ -40,7 +40,7 @@ class HaloFinder(V.NameFinder):
 
 
 class RopeScene:
-    def __init__(self, profile, player_name=''):
+    def __init__(self, profile, player_name='', name_template='', template_owner=''):
         path = V.asset_path(profile)
         self.data = json.loads(path.read_text(encoding='utf-8'))
         d = self.data
@@ -53,8 +53,14 @@ class RopeScene:
         d.setdefault('movement_floor_tolerance', 4)
         d.setdefault('nameplate_offset_y', 20)
         self.typed_name = None
+        self.custom_player = None
         self.allow_player_images = True
-        if player_name.strip():
+        if name_template:
+            from .custom_template import CustomNameFinder, check_owner
+            check_owner(player_name, template_owner)
+            self.custom_player = CustomNameFinder(name_template)
+            self.allow_player_images = False
+        elif player_name.strip():
             from .name_ocr import TypedNameFinder, normalize_name
             self.typed_name = TypedNameFinder(player_name)
             # 现成称号图仅供模板中绑定的角色使用，换名字不继承别人的图。
@@ -151,6 +157,13 @@ class RopeScene:
         region = self.region(frame, a, d['player_roi'])
         candidates, best_score = [], 0.0
         source = '完整称号牌'
+        if self.custom_player:
+            hit = self.find_in(self.custom_player, region)
+            if self.custom_player.ambiguous:
+                return Observation(anchor=a, reason='未认到唯一人物名字图片（有多个相同候选），停止动作')
+            if hit:
+                candidates.append(V.Hit(hit.x, hit.y + d['nameplate_offset_y'], hit.score))
+                source = '粘贴名字图片'
         if self.typed_name:
             box = list(d['player_roi'])
             name_y = d['player_y'] - d['nameplate_offset_y']
@@ -190,6 +203,8 @@ class RopeScene:
                 candidates.append(V.Hit(hit.x, hit.y + d['nameplate_offset_y'], hit.score))
                 source = self.typed_name.source
         if not candidates:
+            if self.custom_player:
+                return Observation(anchor=a, reason='未认到粘贴的名字图片，停止动作；请检查图片是否为当前角色的原尺寸完整名字')
             if self.typed_name:
                 return Observation(anchor=a, reason=f'未认到输入角色名「{self.typed_name.name}」或对应备用图，停止动作')
             return Observation(anchor=a, reason=f'未认到人物名字牌（最高 {best_score:.3f}，'
@@ -336,7 +351,7 @@ class FailureSnapshots:
         if not reason:
             return None
         kind = ('anchor' if reason.startswith('未认到绳边平台') else
-                'player' if reason.startswith(('未认到人物名字牌', '未认到输入角色名', '未认到唯一角色名')) else
+                'player' if reason.startswith(('未认到人物名字牌', '未认到输入角色名', '未认到唯一', '未认到粘贴')) else
                 'height' if reason.startswith('人物高度异常') else 'position')
         if now - self.saved_at.get(kind, -float('inf')) < 5:
             return None
@@ -356,10 +371,13 @@ def run(bot, cfg):
     from .held_input import HeldInput
     if not cfg.vision_enabled:
         raise ValueError('绳边射手必须启用截图识别，不支持纯计时攻击')
-    scene = RopeScene(cfg.archer_profile, cfg.archer_player_name)
+    scene = RopeScene(cfg.archer_profile, cfg.archer_player_name,
+                      cfg.archer_name_template, cfg.archer_template_owner)
     controller = ArcherController(scene.data)
     bot.log(f'[绳边射手 v{ARCHER_VERSION}] 内侧站位 / 光圈识别；有猴子长按 Shift，无怪松开')
-    if scene.typed_name:
+    if scene.custom_player:
+        bot.log('[定位模式] 使用玩家粘贴的名字图片；匹配失败即停止动作')
+    elif scene.typed_name:
         bot.log(f'[定位模式] 输入角色名：{scene.typed_name.name}；本地 OCR + 对应名字图片备用')
     diagnostics = FailureSnapshots(V.program_dir() / 'captures' / 'diagnostics')
     last_reason = last_action = last_source = None

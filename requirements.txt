@@ -3,3 +3,4 @@ opencv-python>=4.8,<5
 mss>=9,<11
 rapidocr==3.9.2
 onnxruntime==1.30.0
+Pillow>=12.3,<13
