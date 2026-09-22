@@ -82,8 +82,8 @@ class ArcherApp(OriginalApp):
         self.vision_on.set(True)
         self._template_loading = False
         self._refresh_name_template()
-        self.title(f'冒险岛 · 绳边射手 v{ARCHER_VERSION}（粘贴模板 / 输入名字）')
-        self._log(f'[版本] 绳边射手 v{ARCHER_VERSION}：粘贴模板 / 输入名字 / 光圈识别')
+        self.title(f'冒险岛 · 绳边射手 v{ARCHER_VERSION}（向右攻击 / 先清怪后回位）')
+        self._log(f'[版本] 绳边射手 v{ARCHER_VERSION}：确认右转 / 安全区先清怪后回位 / 粘贴模板')
         entry = farm_gui.sys.executable if getattr(farm_gui.sys, 'frozen', False) else __file__
         self._log(f'[程序] {Path(entry).resolve()}')
 

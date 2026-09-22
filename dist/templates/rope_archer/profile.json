@@ -35,7 +35,7 @@
     364
   ],
   "player_y": 320.5,
-  "floor_tolerance": 10,
+  "floor_tolerance": 40,
   "safe_left": -187,
   "safe_right": 39,
   "target_x": -9,
@@ -45,7 +45,7 @@
   "max_speed": 350,
   "move_min": 0.015,
   "move_max": 0.035,
-  "face_hold": 0.025,
+  "face_hold": 0.12,
   "attack_hold": 0.055,
   "attack_gap": 0.55,
   "burst_cooldown": 0.9,
@@ -54,7 +54,7 @@
   "release_latency_secs": 0.02,
   "edge_margin": 18,
   "max_frame_age": 0.12,
-  "movement_floor_tolerance": 4,
+  "movement_floor_tolerance": 12,
   "monkey_halo_template": "monkey_halo.png",
   "monkey_halo_threshold": 0.86,
   "monkey_halo_roi": [
@@ -62,5 +62,8 @@
     270,
     673,
     318
-  ]
+  ],
+  "attack_range": 450,
+  "face_confirm_distance": 6,
+  "landing_stable_secs": 0.18
 }

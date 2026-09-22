@@ -118,7 +118,7 @@ class SceneNameTests(TestCase):
 
     def test_text_position_still_obeys_floor_and_edge_limits(self):
         for box in [TextBox('Other', .99, 265, 20, 290, 32),
-                    TextBox('Other', .99, 180, 40, 220, 52)]:
+                    TextBox('Other', .99, 180, 0, 220, 12)]:
             scene, _ = self.scene('Other', [box])
             o = scene.observe(cv2.imread(str(ROOT / 'tests/fixtures/archer_monkey_sequence_6.png')))
             self.assertTrue(o.reason)

@@ -428,8 +428,8 @@ class App(tk.Tk):
                 cv2.imencode('.png', frame)[1].tofile(str(folder / 'rope_archer_raw.png'))
                 out = folder / 'rope_archer_test.png'
                 cv2.imencode('.png', scene.annotate(frame, observation))[1].tofile(str(out))
-                text = observation.reason or (f'右侧有猴子（{observation.monkey_source}）：回到内侧并站稳后长按 Shift' if observation.monkey
-                                              else '右侧无猴子：不攻击')
+                text = observation.reason or (f'右侧有猴子（{observation.monkey_source}）：安全站位且确认右朝向后优先长按 Shift' if observation.monkey
+                                              else '右侧射程内无猴子：不攻击')
                 if observation.player:
                     text += f'；{observation.player_source}，人物匹配 {observation.player.score:.3f}'
                 self._log(f'[射手试识别 v{ARCHER_VERSION}] {text}；预览：{out}')

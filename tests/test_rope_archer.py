@@ -23,20 +23,32 @@ class ControllerTests(TestCase):
         self.c = ArcherController(self.scene.data)
         self.o = Observation(Hit(463, 522.5, 1), Hit(472, 202, 1), Hit(900, 516, 1))
 
+    def step(self, o, now):
+        action = self.c.decide(o, now)
+        if action:
+            self.c.applied(action[0], o, now)
+        return action
+
+    def begin_attack(self):
+        self.assertEqual(self.stable(self.o)[0], 'right')
+        self.o = replace(self.o, player=Hit(469, 522.5, 1))
+        self.assertIsNone(self.step(self.o, .06))
+        self.assertEqual(self.step(self.o, .16)[0], 'shift')
+
     def stable(self, o, now=0):
-        self.c.decide(o, now)
-        return self.c.decide(o, now)
+        self.step(o, now)
+        return self.step(o, now)
 
     def test_attack_stays_held_until_monkey_disappears(self):
-        self.assertEqual(self.stable(self.o)[0], 'right')
-        for now in (.1, .3, .7, 1.0, 2.0):
-            self.assertEqual(self.c.decide(self.o, now)[0], 'shift')
-        self.assertIsNone(self.c.decide(replace(self.o, monkey=None), 2.1))
+        self.begin_attack()
+        for now in (.2, .3, .7, 1.0, 2.0):
+            self.assertEqual(self.step(self.o, now)[0], 'shift')
+        self.assertIsNone(self.step(replace(self.o, monkey=None), 2.1))
 
     def test_no_monkey_means_no_attack_or_turn(self):
         o = replace(self.o, monkey=None)
         self.assertIsNone(self.stable(o))
-        self.assertIsNone(self.c.decide(o, 10))
+        self.assertIsNone(self.step(o, 10))
 
     def test_knockback_continues_moving_without_stability_pauses(self):
         o = replace(self.o, player=Hit(400, 522.5, 1), monkey=None)
@@ -44,35 +56,91 @@ class ControllerTests(TestCase):
         self.assertEqual(key, 'right')
         self.assertGreater(lease, .2)
         for i, x in enumerate((420, 430, 440, 450)):
-            action = self.c.decide(replace(o, player=Hit(x, 522.5, 1)), .1 + i * .1)
+            action = self.step(replace(o, player=Hit(x, 522.5, 1)), .1 + i * .1)
             self.assertEqual(action[0], 'right')
-        self.assertIsNone(self.c.decide(replace(o, player=Hit(458, 522.5, 1)), .6))
+        self.assertIsNone(self.step(replace(o, player=Hit(458, 522.5, 1)), .6))
 
     def test_right_edge_returns_left_and_leaves_turning_space(self):
         o = replace(self.o, player=Hit(510, 522.5, 1))
         self.assertEqual(self.stable(o)[0], 'left')
         # 进入原来的站位范围也继续这一段回位，避免左一下右一下。
-        self.assertEqual(self.c.decide(replace(o, player=Hit(495, 522.5, 1)), .1)[0], 'left')
-        self.assertIsNone(self.c.decide(replace(o, player=Hit(456, 522.5, 1)), .2))
-        self.assertEqual(self.c.decide(replace(o, player=Hit(456, 522.5, 1)), .4)[0], 'right')
-        self.assertEqual(self.c.decide(replace(o, player=Hit(460, 522.5, 1)), .5)[0], 'shift')
+        self.assertEqual(self.step(replace(o, player=Hit(495, 522.5, 1)), .1)[0], 'left')
+        self.assertIsNone(self.step(replace(o, player=Hit(456, 522.5, 1)), .2))
+        self.assertEqual(self.step(replace(o, player=Hit(456, 522.5, 1)), .4)[0], 'right')
+        self.assertIsNone(self.step(replace(o, player=Hit(462, 522.5, 1)), .5))
+        self.assertEqual(self.step(replace(o, player=Hit(462, 522.5, 1)), .6)[0], 'shift')
 
     def test_arrival_noise_does_not_restart_movement(self):
         o = replace(self.o, player=Hit(420, 522.5, 1), monkey=None)
         self.stable(o)
-        self.assertIsNone(self.c.decide(replace(o, player=Hit(458, 522.5, 1)), .1))
+        self.assertIsNone(self.step(replace(o, player=Hit(458, 522.5, 1)), .1))
         for i, x in enumerate((455, 460, 470, 453, 457)):
-            self.assertIsNone(self.c.decide(replace(o, player=Hit(x, 522.5, 1)), .4 + i * .1))
+            self.assertIsNone(self.step(replace(o, player=Hit(x, 522.5, 1)), .4 + i * .1))
 
     def test_missing_player_anchor_or_wrong_floor_stops(self):
         for o in (Observation(reason='missing'), replace(self.o, player=None),
                   replace(self.o, anchor=None), replace(self.o, reason='wrong floor')):
             self.assertIsNone(self.stable(o))
 
-    def test_attack_releases_for_knockback_recovery(self):
+    def test_knockback_attacks_first_then_recovers_when_clear(self):
+        self.begin_attack()
+        o = replace(self.o, player=Hit(430, 522.5, 1), monkey=Hit(700, 516, 1))
+        self.assertEqual(self.step(o, .3)[0], 'shift')
+        self.assertEqual(self.step(replace(o, monkey=None), .4)[0], 'right')
+
+    def test_far_monkey_does_not_prevent_recovery(self):
+        self.begin_attack()
+        self.assertEqual(self.step(replace(self.o, player=Hit(400, 522.5, 1)), .3)[0], 'right')
+
+    def test_ignored_right_input_never_authorizes_attack(self):
         self.stable(self.o)
-        self.assertEqual(self.c.decide(self.o, .1)[0], 'shift')
-        self.assertEqual(self.c.decide(replace(self.o, player=Hit(430, 522.5, 1)), .2)[0], 'right')
+        for i in range(1, 40):
+            action = self.step(self.o, i * .06)
+            self.assertEqual(action[0], 'right')
+            self.assertFalse(self.c.facing_right)
+
+    def test_planned_but_not_applied_right_key_is_not_confirmation(self):
+        self.c.decide(self.o, 0)
+        self.assertEqual(self.c.decide(self.o, .01)[0], 'right')
+        moved = replace(self.o, player=Hit(469, 522.5, 1))
+        self.c.decide(moved, .07)
+        self.assertFalse(self.c.facing_right)
+
+    def test_wrong_direction_source_change_or_stale_input_cannot_confirm(self):
+        cases = [(457, '', .1), (469, 'different locator', .1), (469, '', .5), (465, '', .1)]
+        for x, source, now in cases:
+            self.c.reset()
+            self.stable(self.o)
+            action = self.step(replace(self.o, player=Hit(x, 522.5, 1), player_source=source), now)
+            self.assertFalse(self.c.facing_right)
+            self.assertTrue(action is None or action[0] != 'shift')
+
+    def test_near_left_edge_rescues_before_attack(self):
+        self.begin_attack()
+        o = replace(self.o, player=Hit(295, 522.5, 1), monkey=Hit(600, 516, 1))
+        self.assertEqual(self.step(o, .3)[0], 'right')
+
+    def test_recovery_stops_for_reachable_monkey(self):
+        o = replace(self.o, player=Hit(380, 522.5, 1), monkey=None)
+        self.assertEqual(self.stable(o)[0], 'right')
+        o = replace(o, player=Hit(395, 522.5, 1), monkey=Hit(620, 516, 1))
+        self.assertIsNone(self.step(o, .08))
+        self.assertEqual(self.step(o, .18)[0], 'shift')
+
+    def test_new_fight_and_focus_reset_require_new_turn_confirmation(self):
+        self.begin_attack()
+        self.step(replace(self.o, monkey=None), .3)
+        self.step(replace(self.o, monkey=None), 1.0)
+        action = self.step(self.o, 1.1)
+        self.assertNotEqual(action[0], 'shift')
+        self.c.reset()
+        self.assertIsNone(self.step(self.o, 1.2))
+        self.assertNotEqual(self.step(self.o, 1.3)[0], 'shift')
+
+    def test_brief_missed_monkey_releases_attack_without_turning_jitter(self):
+        self.begin_attack()
+        self.assertIsNone(self.step(replace(self.o, monkey=None), .3))
+        self.assertEqual(self.step(self.o, .4)[0], 'shift')
 
     def test_move_deadline_respects_edge_even_when_far_from_target(self):
         o = replace(self.o, player=Hit(430, 522.5, 1))
@@ -89,15 +157,55 @@ class ControllerTests(TestCase):
         self.stable(self.o)
         self.c.settle_until = 100
         self.c.facing_right = True
-        self.assertEqual(self.c.decide(replace(self.o, player=Hit(500, 522.5, 1)), .2)[0], 'left')
+        self.assertEqual(self.step(replace(self.o, player=Hit(500, 522.5, 1)), .2)[0], 'left')
 
     def test_turn_near_guard_band_first_retreats(self):
         self.assertEqual(self.stable(replace(self.o, player=Hit(480, 522.5, 1)))[0], 'left')
 
-    def test_airborne_small_height_change_still_blocks_motion_and_attack(self):
-        o = replace(self.o, player=Hit(400, 528, 1))
+    def test_starting_on_uneven_ground_recovers_after_stability(self):
+        o = replace(self.o, player=Hit(400, 528, 1), monkey=None)
         self.assertIsNone(self.stable(o))
-        self.assertIsNone(self.c.decide(o, .2))
+        self.assertIsNone(self.step(o, .1))
+        self.assertEqual(self.step(o, .2)[0], 'right')
+
+    def test_small_ground_undulations_do_not_interrupt_continuous_movement(self):
+        o = replace(self.o, player=Hit(380, 522.5, 1), monkey=None)
+        self.assertEqual(self.stable(o)[0], 'right')
+        for i, (x, y) in enumerate(((390, 525.5), (400, 528.5), (410, 531.5),
+                                     (420, 528.5), (430, 525.5), (440, 522.5))):
+            self.assertEqual(self.step(replace(o, player=Hit(x, y, 1)), .1 + i * .1)[0], 'right')
+
+    def test_knockup_lands_on_different_height_then_attacks_without_left_turn(self):
+        self.begin_attack()
+        o = replace(self.o, monkey=Hit(700, 516, 1))
+        for x, y, now in ((435, 502.5, .3), (430, 507.5, .4), (430, 516.5, .5),
+                           (430, 525.5, .56), (430, 527.5, .62)):
+            self.assertIsNone(self.step(replace(o, player=Hit(x, y, 1)), now))
+            self.assertTrue(self.c.facing_right)
+        self.assertEqual(self.step(replace(o, player=Hit(430, 527, 1)), .75)[0], 'shift')
+
+    def test_stable_airborne_apex_or_lower_floor_is_not_ground(self):
+        for offset in (-20, 60):
+            self.c.reset()
+            o = replace(self.o, player=Hit(430, 522.5 + offset, 1), monkey=Hit(700, 516, 1))
+            for now in (0, .1, .2, .4, 1):
+                self.assertIsNone(self.step(o, now))
+
+    def test_passing_ground_height_does_not_end_airborne_wait(self):
+        self.begin_attack()
+        o = replace(self.o, monkey=Hit(700, 516, 1))
+        for y, now in ((502.5, .3), (519, .4), (522, .46), (525, .52), (528, .58), (531, .64)):
+            self.assertIsNone(self.step(replace(o, player=Hit(430, y, 1)), now))
+
+    def test_unconfirmed_right_motion_while_airborne_cannot_authorize_attack(self):
+        self.stable(self.o)
+        o = replace(self.o, player=Hit(469, 502.5, 1))
+        self.assertIsNone(self.step(o, .1))
+        self.assertFalse(self.c.facing_right)
+        o = replace(o, player=Hit(469, 522.5, 1))
+        for now in (.2, .3, .4):
+            action = self.step(o, now)
+            self.assertTrue(action is None or action[0] != 'shift')
 
     def test_blind_hold_with_release_delay_and_position_error_stays_in_home_band(self):
         d = self.c.d
@@ -139,17 +247,34 @@ class SceneTests(TestCase):
         self.assertEqual(o.player.x, 500)
         self.assertIsNotNone(o.monkey)
 
+    def test_far_target_does_not_hide_nearby_body_or_halo(self):
+        for halo in (False, True):
+            frame = self.frame(monkey=False, player_x=400)
+            far = self.scene.monkeys[0].template
+            frame[500:500+far.shape[0], 1000:1000+far.shape[1]] = far
+            if halo:
+                near = cv2.imread(str(PROFILE.parent / 'monkey_halo.png'))
+                frame[480:492, 700:742] = near
+            else:
+                frame[500:500+far.shape[0], 700:700+far.shape[1]] = far
+            o = self.scene.observe(frame)
+            self.assertIsNotNone(o.monkey)
+            self.assertLess(o.monkey.x - o.player.x, 450)
+            self.assertEqual(o.monkey_source, '头顶光圈' if halo else '头部/身体')
+            frame[470:550, 650:850] = 30
+            self.assertIsNone(self.scene.observe(frame).monkey)
+
     def test_empty_monster_region_is_idle(self):
         o = self.scene.observe(self.frame(monkey=False))
         self.assertFalse(o.reason)
         self.assertIsNone(o.monkey)
 
-    def test_actual_monkey_animation_sequence_does_not_flicker(self):
+    def test_actual_animation_sequence_detects_only_reachable_monkeys(self):
         for i in range(8):
             frame = cv2.imread(str(Path(__file__).parent / 'fixtures' / f'archer_monkey_sequence_{i}.png'))
             o = self.scene.observe(frame)
             self.assertFalse(o.reason)
-            self.assertEqual(o.monkey is not None, i >= 3)
+            self.assertEqual(o.monkey is not None, i >= 4)  # 第 3 帧唯一目标在 505px 外。
 
     def test_other_floor_or_left_monkey_ignored(self):
         for x, y in ((400, 510), (700, 300)):
@@ -212,6 +337,14 @@ class SceneTests(TestCase):
         self.assertFalse(o.reason)
         self.assertEqual(o.player.x - o.anchor.x, 28)
         self.assertIsNotNone(o.monkey)
+
+    def test_scene_keeps_tracking_recoverable_knockup(self):
+        o = self.scene.observe(self.frame(player_x=430, player_y=502.5))
+        self.assertFalse(o.reason)
+        controller = ArcherController(self.scene.data)
+        self.assertIsNone(controller.decide(o, 0))
+        self.assertIsNone(controller.decide(o, .2))
+        self.assertIn('等待落地', controller.wait_reason)
 
     def test_dropped_player_stops(self):
         self.assertTrue(self.scene.observe(self.frame(player_y=582.5)).reason)

@@ -50,8 +50,11 @@ class RopeScene:
         d.setdefault('release_latency_secs', .02)
         d.setdefault('edge_margin', 18)
         d.setdefault('max_frame_age', .12)
-        d.setdefault('movement_floor_tolerance', 4)
+        d.setdefault('movement_floor_tolerance', 12)
+        d.setdefault('landing_stable_secs', .18)
         d.setdefault('nameplate_offset_y', 20)
+        d.setdefault('attack_range', 450)
+        d.setdefault('face_confirm_distance', 6)
         self.typed_name = None
         self.custom_player = None
         self.allow_player_images = True
@@ -95,17 +98,20 @@ class RopeScene:
                    'player_y', 'floor_tolerance', 'max_speed', 'move_stop_tolerance',
                    'face_hold', 'key_lease_secs', 'scan_interval', 'position_uncertainty',
                    'release_latency_secs', 'edge_margin', 'max_frame_age', 'movement_floor_tolerance',
-                   'nameplate_offset_y')
+                   'nameplate_offset_y', 'attack_range', 'face_confirm_distance', 'landing_stable_secs')
         if any(not math.isfinite(d[k]) for k in numeric):
             raise ValueError('射手参数必须是有限数值')
         if not (d['safe_left'] < d['target_x'] - d['target_tolerance'] <
                 d['target_x'] + d['target_tolerance'] < d['safe_right']):
             raise ValueError('回位区必须完整位于安全边界内')
         if not (0 < d['move_stop_tolerance'] < d['target_tolerance'] and
-                0 < d['face_hold'] <= .06 and .2 <= d['key_lease_secs'] <= .6 and
+                0 < d['face_hold'] <= .2 and .2 <= d['key_lease_secs'] <= .6 and
                 d['max_speed'] > 0 and d['floor_tolerance'] > 0 and
                 .03 <= d['scan_interval'] <= .5):
             raise ValueError('射手动作时长或移动速度参数无效')
+        if not (50 <= d['attack_range'] <= 600 and 6 <= d['face_confirm_distance'] <= 10
+                and .15 <= d['landing_stable_secs'] <= .5):
+            raise ValueError('射程或转向确认距离无效')
         reserve = d['position_uncertainty'] + d['release_latency_secs'] * d['max_speed']
         if not (d['position_uncertainty'] >= 3 and .01 <= d['release_latency_secs'] <= .1
                 and d['edge_margin'] >= 15 and .04 <= d['max_frame_age'] <= .15
@@ -167,7 +173,7 @@ class RopeScene:
         if self.typed_name:
             box = list(d['player_roi'])
             name_y = d['player_y'] - d['nameplate_offset_y']
-            box[1], box[3] = name_y - 28, name_y + 28
+            box[1], box[3] = name_y - 48, name_y + 48
             name_region = self.region(frame, a, box)
             # 首帧先读文字；之后若现成备用图可用，避免反复慢 OCR 打断连续按键。
             initial_read = self.typed_name.last_ocr == -float('inf')
@@ -214,11 +220,13 @@ class RopeScene:
             source += '（图片备用）'
         if abs(p.y - a.y - d['player_y']) > d['floor_tolerance']:
             return Observation(p, a, reason=f'人物高度异常（相对高度 {p.y - a.y:.1f}，'
-                               f'预期 {d["player_y"]:.1f}），停止动作（可能掉层或被击飞）')
+                               f'预期 {d["player_y"]:.1f}），已超出本层恢复范围，停止动作')
         if not d['safe_left'] <= p.x - a.x <= d['safe_right']:
             return Observation(p, a, reason='人物超出已标定的安全平台，停止动作')
         box = list(d['monkey_roi'])
         box[0] = max(box[0], p.x - a.x + 25)
+        # 在射程内搜索，避免远处高分目标盖过附近可攻击的猴子。
+        box[2] = min(box[2], p.x - a.x + d['attack_range'])
         region = self.region(frame, a, box)
         if region is None:
             return Observation(p, a, reason='猴子观察区域超出窗口，停止动作')
@@ -228,6 +236,7 @@ class RopeScene:
         if monkey is None and self.halo:
             halo_box = list(d['monkey_halo_roi'])
             halo_box[0] = max(halo_box[0], p.x - a.x + 25)
+            halo_box[2] = min(halo_box[2], p.x - a.x + d['attack_range'])
             monkey = self.find_in(self.halo, self.region(frame, a, halo_box))
             if monkey:
                 monkey_source = '头顶光圈'
@@ -263,7 +272,7 @@ class RopeScene:
 
 
 class ArcherController:
-    """带停稳范围的回位状态机；返回期望保持的按键，不逐帧重复点按。"""
+    """先保护边缘，再清怪；右键生效须由当前画面的实际位移确认。"""
     def __init__(self, data):
         self.d = data
         self.reset()
@@ -272,27 +281,99 @@ class ArcherController:
         self.facing_right = False
         self.previous = None
         self.moving = None
-        self.face_until = 0.0
         self.settle_until = 0.0
+        self.turn_origin = None
+        self.last_right_at = -float('inf')
+        self.wait_reason = ''
+        self.no_monkey_since = None
+        self.airborne = False
+        self.landing = None
 
-    def _move(self, x):
-        d = self.d
-        # 即使下一帧完全卡住，也只走到回位区以内；预扣定位误差和松键延迟。
-        limit = (d['target_x'] + d['target_tolerance'] if self.moving == 'right'
-                 else d['target_x'] - d['target_tolerance'])
-        room = (limit - x if self.moving == 'right' else x - limit) - self.reserve
-        lease = min(d['key_lease_secs'], room / d['max_speed'])
-        if lease <= .005:
-            return None
-        self.facing_right = self.moving == 'right'
-        return self.moving, lease, '持续按住方向键回位'
+    def _grounded(self, y, previous, now):
+        """容许地面起伏；明显升降后需连续多帧稳定，不能把跳跃顶点当落地。"""
+        near_ground = abs(y - self.d['player_y']) <= self.d['movement_floor_tolerance']
+        if previous is None:
+            self.airborne = not near_ground or abs(y - self.d['player_y']) > 4
+            return False
+        if not near_ground or abs(y - previous[1]) > 4:
+            self.airborne = True
+            self.landing = None
+        if not self.airborne:
+            return True
+        if near_ground:
+            if self.landing is None or max(self.landing[2], y) - min(self.landing[1], y) > 3:
+                self.landing = (now, y, y, 1)
+            else:
+                since, low, high, count = self.landing
+                self.landing = (since, min(low, y), max(high, y), count + 1)
+                if count + 1 >= 3 and now - since >= self.d['landing_stable_secs']:
+                    self.airborne = False
+                    self.landing = None
+                    return True
+        return False
 
     @property
     def reserve(self):
         return self.d['position_uncertainty'] + self.d['release_latency_secs'] * self.d['max_speed']
 
+    def applied(self, key, o, now):
+        """仅在持键层成功提交后记账；计划发右键不等于转向成功。"""
+        if key == 'right':
+            if self.turn_origin is None or now - self.last_right_at > .25:
+                self.turn_origin = (o.player.x - o.anchor.x, o.player.y - o.anchor.y,
+                                    o.player_source)
+            self.last_right_at = now
+        elif key == 'left':
+            self._forget_facing()
+
+    def _forget_facing(self):
+        self.facing_right = False
+        self.turn_origin = None
+        self.last_right_at = -float('inf')
+
+    def _confirm_turn(self, o, x, y, now):
+        origin = self.turn_origin
+        if self.facing_right or origin is None:
+            return False
+        ox, oy, source = origin
+        if (now - self.last_right_at > .25 or source != o.player_source or
+                abs(y - oy) > 3 or x < ox - 1):
+            self.turn_origin = None
+            return False
+        if x - ox >= self.d['face_confirm_distance']:
+            self.facing_right = True
+            self.turn_origin = None
+            self.settle_until = now + .08
+            return True
+        return False
+
+    def _move(self, x):
+        d = self.d
+        limit = (d['target_x'] + d['target_tolerance'] if self.moving == 'right'
+                 else d['target_x'] - d['target_tolerance'])
+        room = (limit - x if self.moving == 'right' else x - limit) - self.reserve
+        lease = min(d['key_lease_secs'], room / d['max_speed'])
+        # 向左回位从计划开始就撤销攻击许可，即使按键随后提交失败。
+        if self.moving == 'left':
+            self._forget_facing()
+        if lease <= .005:
+            self.wait_reason = '移动余量不足，松键重新确认位置'
+            return None
+        return self.moving, lease, '持续按住方向键回位'
+
+    def _turn(self, x):
+        d = self.d
+        room = d['target_x'] + d['target_tolerance'] - x - self.reserve
+        progress = max(0, x - self.turn_origin[0]) if self.turn_origin else 0
+        needed = max(1, d['face_confirm_distance'] - progress)
+        if room < needed:
+            self.moving = 'left'
+            return self._move(x)
+        return 'right', min(d['face_hold'], room / d['max_speed']), '向右转向，等待实际右移确认（未确认不攻击）'
+
     def decide(self, o, now):
         d = self.d
+        self.wait_reason = ''
         if o.reason or not o.player or not o.anchor:
             self.reset()
             return None
@@ -301,22 +382,53 @@ class ArcherController:
             self.reset()
             return None
         previous, self.previous = self.previous, (x, y)
-        # 启动/失焦恢复需要两帧确认；正常移动不再因位移超过 9px 而断续。
-        if (previous is None or abs(y - previous[1]) > 3 or
-                abs(y - d['player_y']) > d['movement_floor_tolerance']):
+        if not self._grounded(y, previous, now):
             self.moving = None
-            self.facing_right = False
-            self.face_until = 0.0
+            # 击飞本身不改变朝向；保留已确认右朝向，撤销未完成的转向证据。
+            self.turn_origin = None
+            self.last_right_at = -float('inf')
+            self.wait_reason = f'等待落地稳定（高度偏差 {y - d["player_y"]:+.1f}px），暂松按键'
             return None
+        just_confirmed = self._confirm_turn(o, x, y, now)
         goal = d['target_x'] - d['move_stop_tolerance']
-        # 进入右侧缓冲带时，回到内侧优先于攻击、转向和到位后的等待。
+        # 两端缓冲区先保位置；右侧退回过程必须完整结束，不能中途反复转向。
         if x > d['target_x'] + d['target_tolerance']:
             self.moving = 'left'
-            self.face_until = 0.0
             return self._move(x)
+        if x < d['safe_left'] + d['edge_margin']:
+            self.moving = 'right'
+            return self._move(x)
+        if self.moving == 'left':
+            if x > goal:
+                return self._move(x)
+            self.moving = None
+            self.settle_until = now + .15
+            self.wait_reason = '向左回位结束，松键停稳后重新确认右朝向'
+            return None
+        in_range = (o.monkey is not None and
+                    25 <= o.monkey.x - o.player.x <= d['attack_range'])
+        if in_range:
+            self.no_monkey_since = None
+            # 安全区内优先打得到的怪，不为恢复固定站位打断战斗。
+            was_moving = self.moving is not None
+            self.moving = None
+            if just_confirmed or was_moving:
+                self.settle_until = max(self.settle_until, now + .08)
+                self.wait_reason = '停止移动，等待站稳后向右攻击'
+                return None
+            if now < self.settle_until:
+                self.wait_reason = '等待移动结束后站稳'
+                return None
+            if not self.facing_right:
+                return self._turn(x)
+            return 'shift', d['key_lease_secs'], '右朝向已确认，优先清理射程内猴子'
+        # 无目标立即停攻；短暂漏检不触发重新左右走动，持续空场才撤销朝向。
+        if self.no_monkey_since is None:
+            self.no_monkey_since = now
+        if self.facing_right and now - self.no_monkey_since >= .6:
+            self._forget_facing()
         if self.moving:
-            arrived = x >= goal if self.moving == 'right' else x <= goal
-            if not arrived:
+            if x < goal:
                 return self._move(x)
             self.moving = None
             self.settle_until = now + .15
@@ -326,18 +438,8 @@ class ArcherController:
         if abs(x - d['target_x']) > d['target_tolerance']:
             self.moving = 'right' if x < d['target_x'] else 'left'
             return self._move(x)
-        if o.monkey is None:
-            return None
-        if not self.facing_right:
-            if x + d['face_hold'] * d['max_speed'] + self.reserve > d['target_x'] + d['target_tolerance']:
-                self.moving = 'left'
-                return self._move(x)
-            self.facing_right = True
-            self.face_until = now + d['face_hold']
-            return 'right', d['face_hold'], '转向右侧'
-        if now < self.face_until:
-            return 'right', self.face_until - now, '转向右侧'
-        return 'shift', d['key_lease_secs'], '右侧有猴子，持续按住 Shift'
+        self.wait_reason = '右侧射程内无猴子，等待'
+        return None
 
 
 class FailureSnapshots:
@@ -374,13 +476,13 @@ def run(bot, cfg):
     scene = RopeScene(cfg.archer_profile, cfg.archer_player_name,
                       cfg.archer_name_template, cfg.archer_template_owner)
     controller = ArcherController(scene.data)
-    bot.log(f'[绳边射手 v{ARCHER_VERSION}] 内侧站位 / 光圈识别；有猴子长按 Shift，无怪松开')
+    bot.log(f'[绳边射手 v{ARCHER_VERSION}] 确认右转后攻击 / 安全区先清怪后回位 / 光圈识别')
     if scene.custom_player:
         bot.log('[定位模式] 使用玩家粘贴的名字图片；匹配失败即停止动作')
     elif scene.typed_name:
         bot.log(f'[定位模式] 输入角色名：{scene.typed_name.name}；本地 OCR + 对应名字图片备用')
     diagnostics = FailureSnapshots(V.program_dir() / 'captures' / 'diagnostics')
-    last_reason = last_action = last_source = None
+    last_reason = last_action = last_source = last_wait = None
     with HeldInput(bot) as inputs:
         while True:
             if bot.gate():
@@ -395,9 +497,12 @@ def run(bot, cfg):
             if now - started > scene.data['max_frame_age'] or epoch != inputs.epoch:
                 inputs.clear()
                 controller.reset()
+                if last_wait != 'slow':
+                    bot.log('[等待] 截图识别超时或前台状态变化，松键重新识别')
+                last_wait = 'slow'
                 bot.wait(scene.data['scan_interval'])
                 continue
-            reason = o.reason or (f'右侧发现猴子（{o.monkey_source}）' if o.monkey else '右侧无猴子，等待')
+            reason = o.reason or (f'右侧发现猴子（{o.monkey_source}）' if o.monkey else '右侧射程内无猴子，等待')
             if reason != last_reason:
                 bot.log(f'[识别] {reason}')
                 last_reason = reason
@@ -412,6 +517,8 @@ def run(bot, cfg):
                 if key in ('left', 'right') and key_at_capture == key:
                     deadline = started + lease
                 if inputs.apply(key, deadline, epoch):
+                    controller.applied(key, o, now)
+                    last_wait = None
                     if label != last_action:
                         bot.log(f'[动作] {label}')
                     last_action = label
@@ -423,6 +530,9 @@ def run(bot, cfg):
                 if last_action:
                     bot.log('[动作] 松开按键')
                 last_action = None
+                if controller.wait_reason and controller.wait_reason != last_wait:
+                    bot.log(f'[等待] {controller.wait_reason}')
+                last_wait = controller.wait_reason
                 if o.reason:
                     try:
                         saved = diagnostics.record(frame, o, now)
