@@ -68,6 +68,7 @@ class Config:
     edge_margin: int = 60                 # 离两端不足这么多像素算贴边，先往中间挪
     rescue_scale: float = 2.0             # 贴边那一轮移动时长放大倍数（净往中间挪）
     archer_profile: str = 'templates/rope_archer/profile.json'
+    archer_player_name: str = ''           # 射手：留空匹配图片，填写角色名启用本地 OCR
 
 
 def main():

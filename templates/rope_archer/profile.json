@@ -2,6 +2,8 @@
   "name": "猴子沼泽地3 · 绳边射手",
   "anchor_template": "anchor_foreground.png",
   "player_template": "player_native.png",
+  "player_name": "CatApril",
+  "nameplate_offset_y": 20,
   "player_variants": [
     {
       "template": "player.png",

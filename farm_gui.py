@@ -94,6 +94,7 @@ def _defaults():
     d['edge_margin'] = str(c.edge_margin)
     d['rescue_scale'] = str(c.rescue_scale)
     d['archer_profile'] = c.archer_profile
+    d['archer_player_name'] = c.archer_player_name
     return d
 
 
@@ -144,6 +145,7 @@ class App(tk.Tk):
             row=0, column=1, sticky='w', padx=4)
         ttk.Label(top, text='方案').grid(row=1, column=0, sticky='e', padx=4, pady=2)
         self._var('plan', _defaults()['plan'])
+        self._var('archer_player_name', _defaults()['archer_player_name'])
         ttk.Combobox(top, width=22, state='readonly', textvariable=self.vars['plan'],
                      values=list(plans.PLANS)).grid(row=1, column=1, sticky='w', padx=4)
         ttk.Button(top, text='载入绳边射手模板', command=self.on_archer_preset).grid(
@@ -310,6 +312,7 @@ class App(tk.Tk):
             edge_margin=int(g('edge_margin')),
             rescue_scale=float(g('rescue_scale')),
             archer_profile=g('archer_profile'),
+            archer_player_name=g('archer_player_name'),
         )
 
     def on_archer_preset(self):
@@ -407,7 +410,7 @@ class App(tk.Tk):
         if cfg.plan == 'rope_archer':
             try:
                 from autofarm.rope_archer import RopeScene
-                scene = RopeScene(cfg.archer_profile)
+                scene = RopeScene(cfg.archer_profile, cfg.archer_player_name)
                 frame = self._grab(cfg)
                 observation = scene.observe(frame)
                 folder = V.program_dir() / 'captures'

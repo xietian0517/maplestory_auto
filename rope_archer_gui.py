@@ -20,12 +20,14 @@ class ArcherApp(OriginalApp):
         self.vision_on = farm_gui.tk.BooleanVar(value=True)
         box = ttk.LabelFrame(self, text='绳边射手 · 猴子沼泽地3')
         box.pack(fill='x', padx=12, pady=10)
-        for row, (label, key) in enumerate([('窗口标题', 'window_title'), ('独立模板', 'archer_profile')]):
+        for row, (label, key) in enumerate([('窗口标题', 'window_title'), ('独立模板', 'archer_profile'),
+                                          ('角色名（可选）', 'archer_player_name')]):
             ttk.Label(box, text=label).grid(row=row, column=0, padx=8, pady=5)
             ttk.Entry(box, textvariable=self.vars[key], width=52).grid(row=row, column=1, padx=8, pady=5)
-        ttk.Label(box, text='右侧有猴子 → 长按 Shift；无猴子 → 松开\n'
+        ttk.Label(box, text='名字留空：使用原图片；填写名字：本地文字识别，自动生成本次备用图\n'
+                  '右侧有猴子 → 长按 Shift；无猴子 → 松开\n'
                   '被击退 → 向平台内侧回位；钱币遮住身体 → 辅助识别头顶光圈',
-                  justify='left').grid(row=2, column=0, columnspan=2, padx=8, pady=8, sticky='w')
+                  justify='left').grid(row=3, column=0, columnspan=2, padx=8, pady=8, sticky='w')
         checks = ttk.Frame(self)
         checks.pack(fill='x', padx=12)
         self.btn_test = ttk.Button(checks, text='试一下识别（3秒后截图）', command=self.on_test_vision)
@@ -55,8 +57,8 @@ class ArcherApp(OriginalApp):
             self.on_archer_preset()
         self.vars['plan'].set('rope_archer')
         self.vision_on.set(True)
-        self.title(f'冒险岛 · 绳边射手 v{ARCHER_VERSION}（内侧站位 / 光圈识别）')
-        self._log(f'[版本] 绳边射手 v{ARCHER_VERSION}：内侧站位 / 光圈识别')
+        self.title(f'冒险岛 · 绳边射手 v{ARCHER_VERSION}（输入名字 / 图片备用）')
+        self._log(f'[版本] 绳边射手 v{ARCHER_VERSION}：输入名字 / 图片备用 / 光圈识别')
         entry = farm_gui.sys.executable if getattr(farm_gui.sys, 'frozen', False) else __file__
         self._log(f'[程序] {Path(entry).resolve()}')
 

@@ -40,7 +40,7 @@ class HaloFinder(V.NameFinder):
 
 
 class RopeScene:
-    def __init__(self, profile):
+    def __init__(self, profile, player_name=''):
         path = V.asset_path(profile)
         self.data = json.loads(path.read_text(encoding='utf-8'))
         d = self.data
@@ -51,6 +51,14 @@ class RopeScene:
         d.setdefault('edge_margin', 18)
         d.setdefault('max_frame_age', .12)
         d.setdefault('movement_floor_tolerance', 4)
+        d.setdefault('nameplate_offset_y', 20)
+        self.typed_name = None
+        self.allow_player_images = True
+        if player_name.strip():
+            from .name_ocr import TypedNameFinder, normalize_name
+            self.typed_name = TypedNameFinder(player_name)
+            # 现成称号图仅供模板中绑定的角色使用，换名字不继承别人的图。
+            self.allow_player_images = normalize_name(player_name) == normalize_name(d.get('player_name', ''))
         self.anchor = V.NameFinder(path.parent / d['anchor_template'], d['anchor_threshold'])
         self.last_anchor = None
         self.player = V.NameFinder(path.parent / d['player_template'], d['player_threshold'])
@@ -80,7 +88,8 @@ class RopeScene:
         numeric = ('safe_left', 'safe_right', 'target_x', 'target_tolerance',
                    'player_y', 'floor_tolerance', 'max_speed', 'move_stop_tolerance',
                    'face_hold', 'key_lease_secs', 'scan_interval', 'position_uncertainty',
-                   'release_latency_secs', 'edge_margin', 'max_frame_age', 'movement_floor_tolerance')
+                   'release_latency_secs', 'edge_margin', 'max_frame_age', 'movement_floor_tolerance',
+                   'nameplate_offset_y')
         if any(not math.isfinite(d[k]) for k in numeric):
             raise ValueError('射手参数必须是有限数值')
         if not (d['safe_left'] < d['target_x'] - d['target_tolerance'] <
@@ -109,11 +118,11 @@ class RopeScene:
         return frame[y1:y2, x1:x2], x1, y1
 
     @staticmethod
-    def find_in(finder, region):
+    def find_in(finder, region, **kwargs):
         if region is None:
             return None
         image, x, y = region
-        hit = finder.find(image)
+        hit = finder.find(image, **kwargs)
         return V.Hit(hit.x + x, hit.y + y, hit.score) if hit else None
 
     def _find_anchor(self, frame):
@@ -141,7 +150,22 @@ class RopeScene:
         d = self.data
         region = self.region(frame, a, d['player_roi'])
         candidates, best_score = [], 0.0
-        if region is not None:
+        source = '完整称号牌'
+        if self.typed_name:
+            box = list(d['player_roi'])
+            name_y = d['player_y'] - d['nameplate_offset_y']
+            box[1], box[3] = name_y - 28, name_y + 28
+            name_region = self.region(frame, a, box)
+            # 首帧先读文字；之后若现成备用图可用，避免反复慢 OCR 打断连续按键。
+            initial_read = self.typed_name.last_ocr == -float('inf')
+            hit = self.find_in(self.typed_name, name_region,
+                               allow_ocr=initial_read or not self.allow_player_images)
+            if self.typed_name.ambiguous:
+                return Observation(anchor=a, reason='未认到唯一角色名（有多个相同候选），停止动作')
+            if hit:
+                candidates.append(V.Hit(hit.x, hit.y + d['nameplate_offset_y'], hit.score))
+                source = self.typed_name.source
+        if not candidates and region is not None and self.allow_player_images:
             image, rx, ry = region
             for finder, offset in self.players:
                 hit = finder.best(image)
@@ -149,8 +173,7 @@ class RopeScene:
                     best_score = max(best_score, hit.score)
                     if hit.score >= finder.threshold:
                         candidates.append(V.Hit(hit.x + rx + offset, hit.y + ry, hit.score))
-        source = '完整称号牌'
-        if not candidates and region is not None:
+        if not candidates and region is not None and self.allow_player_images:
             # 优先原生像素版本；仍只使用这一帧的可见片段，不沿用历史坐标。
             for finder, offset in self.player_parts:
                 partial = finder.find(image)
@@ -159,10 +182,21 @@ class RopeScene:
                     candidates.append(V.Hit(hit.x + rx + offset, hit.y + ry, hit.score))
                     source = f'称号局部 {count}/4'
                     break
+        if not candidates and self.typed_name and self.allow_player_images and not initial_read:
+            hit = self.find_in(self.typed_name, name_region)
+            if self.typed_name.ambiguous:
+                return Observation(anchor=a, reason='未认到唯一角色名（有多个相同候选），停止动作')
+            if hit:
+                candidates.append(V.Hit(hit.x, hit.y + d['nameplate_offset_y'], hit.score))
+                source = self.typed_name.source
         if not candidates:
+            if self.typed_name:
+                return Observation(anchor=a, reason=f'未认到输入角色名「{self.typed_name.name}」或对应备用图，停止动作')
             return Observation(anchor=a, reason=f'未认到人物名字牌（最高 {best_score:.3f}，'
                                f'阈值 {d["player_threshold"]:.3f}；局部片段不足），停止动作')
         p = max(candidates, key=lambda h: h.score)
+        if self.typed_name and not source.startswith('名字'):
+            source += '（图片备用）'
         if abs(p.y - a.y - d['player_y']) > d['floor_tolerance']:
             return Observation(p, a, reason=f'人物高度异常（相对高度 {p.y - a.y:.1f}，'
                                f'预期 {d["player_y"]:.1f}），停止动作（可能掉层或被击飞）')
@@ -302,7 +336,7 @@ class FailureSnapshots:
         if not reason:
             return None
         kind = ('anchor' if reason.startswith('未认到绳边平台') else
-                'player' if reason.startswith('未认到人物名字牌') else
+                'player' if reason.startswith(('未认到人物名字牌', '未认到输入角色名', '未认到唯一角色名')) else
                 'height' if reason.startswith('人物高度异常') else 'position')
         if now - self.saved_at.get(kind, -float('inf')) < 5:
             return None
@@ -322,9 +356,11 @@ def run(bot, cfg):
     from .held_input import HeldInput
     if not cfg.vision_enabled:
         raise ValueError('绳边射手必须启用截图识别，不支持纯计时攻击')
-    scene = RopeScene(cfg.archer_profile)
+    scene = RopeScene(cfg.archer_profile, cfg.archer_player_name)
     controller = ArcherController(scene.data)
     bot.log(f'[绳边射手 v{ARCHER_VERSION}] 内侧站位 / 光圈识别；有猴子长按 Shift，无怪松开')
+    if scene.typed_name:
+        bot.log(f'[定位模式] 输入角色名：{scene.typed_name.name}；本地 OCR + 对应名字图片备用')
     diagnostics = FailureSnapshots(V.program_dir() / 'captures' / 'diagnostics')
     last_reason = last_action = last_source = None
     with HeldInput(bot) as inputs:

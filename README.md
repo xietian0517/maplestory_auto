@@ -7,13 +7,14 @@
 | `random_jump` | **野猪领地1** |
 | `rope_archer`（绳边射手） | **猴子沼泽3**（游戏内名称：猴子沼泽地3） |
 
-新增独立方案 **`rope_archer`（绳边射手 v1.4.0）**：右侧有猴子时持续按住 Shift，无怪松开；支持光圈辅助识别，击退后持续按住方向键回到平台内侧，移动按剩余距离提前松键。
+新增独立方案 **`rope_archer`（绳边射手 v1.5.0）**：支持输入角色名进行本地 OCR 定位，自动生成名字图片用于后续快速匹配；留空保持原图片模式。右侧有猴子时持续按住 Shift，无怪松开；支持光圈辅助识别，击退后持续按住方向键回到平台内侧，移动按剩余距离提前松键。
 直接运行 `dist\MapleFarmArcher.exe` 或 `rope_archer_gui.py`，使用独立配置，不覆盖旧方案。
 模板、边界、使用步骤与限制见 [射手模板说明](templates/rope_archer/README.md)。截图只能降低走落风险，无法保证被怪物击退时绝不掉落。
 
-仓库包含 v1.4.0 的 Windows 发行包。克隆仓库或下载并解压整个仓库后，直接打开
+仓库包含 v1.5.0 的 Windows 发行包。克隆仓库或下载并解压整个仓库后，直接打开
 [`dist/MapleFarmArcher.exe`](dist/MapleFarmArcher.exe)，无需安装 Python。
 `dist/rope_archer_config.json` 是射手界面配置，`dist/templates/rope_archer/` 包含平台、人物、猴子和光圈图片及识别参数；移动发行包时请保留这些相对路径。
+`dist/models/name_ocr/` 包含本地文字识别模型，输入角色名时需要它。首次识别及重新读文字期间会暂停动作；名字完全遮挡时不保证识别成功。
 源码运行的射手配置是根目录 `rope_archer_config.json`，原有名字牌图片在 `assets/`。
 修改配置后，运行中的程序会保存对应目录的配置文件。
 

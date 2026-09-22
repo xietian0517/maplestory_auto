@@ -43,5 +43,6 @@
  "edge_margin": "60",
  "rescue_scale": "2.0",
  "archer_profile": "templates/rope_archer/profile.json",
- "vision_enabled": true
+ "vision_enabled": true,
+ "archer_player_name": ""
 }
