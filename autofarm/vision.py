@@ -34,7 +34,12 @@ def program_dir():
 def asset_path(value):
     """模板等素材的相对路径按程序目录解析，不跟着工作目录跑。"""
     path = Path(value)
-    return path if path.is_absolute() else program_dir() / path
+    if path.is_absolute():
+        return path
+    external = program_dir() / path
+    if external.exists() or not getattr(sys, 'frozen', False):
+        return external
+    return Path(sys._MEIPASS) / path
 
 
 def capture(region):
@@ -87,11 +92,60 @@ class NameFinder:
 
     def find(self, frame):
         """返回得分最高且过阈值的 Hit；没找到返回 None。"""
+        hit = self.best(frame)
+        return hit if hit is not None and hit.score >= self.threshold else None
+
+    def best(self, frame):
+        """返回最佳候选用于诊断；调用方必须检查阈值后才能行动。"""
         height, width = self.template.shape[:2]
         if height > frame.shape[0] or width > frame.shape[1]:
             return None
         scores = cv2.matchTemplate(frame, self.template, cv2.TM_CCOEFF_NORMED)
         _, score, _, (x, y) = cv2.minMaxLoc(scores)
-        if not np.isfinite(score) or score < self.threshold:
+        if not np.isfinite(score):
             return None
         return Hit(x + width / 2, y + height / 2, float(score))
+
+
+class PartialNameFinder:
+    """遮挡时用互不重叠的称号片段投票，返回同一完整名字牌的中心。"""
+
+    def __init__(self, finder, threshold=.90, minimum=2):
+        self.template = finder.template
+        self.threshold = float(threshold)
+        self.minimum = int(minimum)
+        h, w = self.template.shape[:2]
+        self.parts = []
+        for i in range(4):
+            left, right = round(i * w / 4), round((i + 1) * w / 4)
+            part = self.template[:, left:right]
+            if right - left >= 8 and part.std() >= 5:
+                self.parts.append((left, part))
+
+    def find(self, frame):
+        h, w = self.template.shape[:2]
+        if frame.shape[0] < h:
+            return None
+        votes = []
+        for left, part in self.parts:
+            if frame.shape[1] < part.shape[1]:
+                continue
+            scores = cv2.matchTemplate(frame, part, cv2.TM_CCOEFF_NORMED)
+            _, score, _, (x, y) = cv2.minMaxLoc(scores)
+            if np.isfinite(score) and score >= self.threshold:
+                # 不使用残片本身的中心，避免遮挡变化引起人物坐标漂移。
+                votes.append(Hit(x - left + w / 2, y + h / 2, float(score)))
+        groups = []
+        for vote in votes:
+            group = [v for v in votes if abs(v.x - vote.x) <= 2 and abs(v.y - vote.y) <= 2]
+            if len(group) >= self.minimum:
+                groups.append(group)
+        if not groups:
+            return None
+        best = max(groups, key=lambda g: (len(g), sum(v.score for v in g)))
+        x, y = float(np.median([v.x for v in best])), float(np.median([v.y for v in best]))
+        # 两个不同位置都得到多个片段支持时，不能任意选一个人。
+        if any(abs(np.median([v.x for v in g]) - x) > 4 or
+               abs(np.median([v.y for v in g]) - y) > 4 for g in groups):
+            return None
+        return Hit(x, y, sum(v.score for v in best) / len(best)), len(best)

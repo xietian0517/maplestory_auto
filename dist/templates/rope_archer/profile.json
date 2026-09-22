@@ -1,0 +1,64 @@
+{
+  "name": "猴子沼泽地3 · 绳边射手",
+  "anchor_template": "anchor_foreground.png",
+  "player_template": "player_native.png",
+  "player_variants": [
+    {
+      "template": "player.png",
+      "offset_x": 8
+    }
+  ],
+  "monkey_templates": [
+    "monkey_front.png",
+    "monkey_side.png",
+    "monkey_native_face.png",
+    "monkey_walk_face.png"
+  ],
+  "anchor_threshold": 0.94,
+  "player_threshold": 0.86,
+  "player_partial_threshold": 0.9,
+  "player_partial_min_parts": 2,
+  "monkey_threshold": 0.83,
+  "player_offset_x": 11,
+  "player_roi": [
+    -212,
+    218,
+    80,
+    468
+  ],
+  "monkey_roi": [
+    78,
+    278,
+    673,
+    364
+  ],
+  "player_y": 320.5,
+  "floor_tolerance": 10,
+  "safe_left": -187,
+  "safe_right": 39,
+  "target_x": -9,
+  "target_tolerance": 20,
+  "move_stop_tolerance": 6,
+  "key_lease_secs": 0.4,
+  "max_speed": 350,
+  "move_min": 0.015,
+  "move_max": 0.035,
+  "face_hold": 0.025,
+  "attack_hold": 0.055,
+  "attack_gap": 0.55,
+  "burst_cooldown": 0.9,
+  "scan_interval": 0.04,
+  "position_uncertainty": 4,
+  "release_latency_secs": 0.02,
+  "edge_margin": 18,
+  "max_frame_age": 0.12,
+  "movement_floor_tolerance": 4,
+  "monkey_halo_template": "monkey_halo.png",
+  "monkey_halo_threshold": 0.86,
+  "monkey_halo_roi": [
+    78,
+    270,
+    673,
+    318
+  ]
+}

@@ -4,8 +4,19 @@ assets/
 captures/
 config.json
 gui_config.json
-dist/
+/dist/*
 build/
 冒险岛online/
 *.exe
 *.7z
+
+# 当前射手发行包：保留可执行文件、配置和所需图片。
+!/dist/MapleFarmArcher.exe
+!/dist/rope_archer_config.json
+!/dist/templates/
+!/dist/assets/
+/dist/assets/*
+!/dist/assets/name_CatApril.png
+!assets/
+/assets/*
+!/assets/name_CatApril.png

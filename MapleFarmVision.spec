@@ -7,7 +7,7 @@ a = Analysis(
     ['farm_gui.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('templates/rope_archer', 'templates/rope_archer')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

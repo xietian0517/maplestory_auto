@@ -76,14 +76,17 @@ class Bot:
     def wait(self, secs):
         """可打断等待：暂停/失焦时挂起且不计时，恢复后把剩余时间等完。"""
         remaining = float(secs)
+        interrupted = False
         while remaining > 0:
             self.poll_hotkeys()
             if self.quitting:
                 raise BotStopped
             if self.paused:
+                interrupted = True
                 time.sleep(POLL_SECS)
                 continue
             if not self.foreground():
+                interrupted = True
                 if not self._fg_lost:
                     self.log('[保护] 游戏不在前台，挂起等待…')
                     self._fg_lost = True
@@ -95,6 +98,7 @@ class Bot:
             chunk = min(POLL_SECS, remaining)
             time.sleep(chunk)
             remaining -= chunk
+        return interrupted
 
     # ---------- 动作闸门 ----------
 
@@ -103,6 +107,7 @@ class Bot:
 
         这样方案循环里第一个动作（哪怕是移动）也必须等 F12 开始且游戏在前台。
         """
+        interrupted = False
         while True:
             self.poll_hotkeys()
             if self.quitting:
@@ -111,7 +116,8 @@ class Bot:
                 if self._fg_lost:
                     self.log('[恢复] 游戏回到前台，继续')
                     self._fg_lost = False
-                return
+                return interrupted
+            interrupted = True
             if not self.paused and not self.foreground() and not self._fg_lost:
                 self.log('[保护] 游戏不在前台，挂起等待…')
                 self._fg_lost = True
@@ -145,3 +151,24 @@ class Bot:
         for key in tuple(self.held):
             self.api.send_key(key, up=True)
         self.held.clear()
+
+    def try_tap(self, key, hold):
+        """基于刚取得的截图发键；暂停或失焦直接放弃，不等恢复后补发。"""
+        self.poll_hotkeys()
+        if self.quitting:
+            raise BotStopped
+        if self.paused or not self.foreground():
+            return False
+        try:
+            self.down(key)
+            until = time.monotonic() + hold
+            while time.monotonic() < until:
+                self.poll_hotkeys()
+                if self.quitting:
+                    raise BotStopped
+                if self.paused or not self.foreground():
+                    return False
+                time.sleep(min(.005, max(0, until - time.monotonic())))
+            return True
+        finally:
+            self.up(key)

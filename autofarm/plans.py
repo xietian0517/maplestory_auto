@@ -9,6 +9,7 @@ import time
 
 from . import blocks as B
 from . import vision as V
+from .rope_archer import run as rope_archer
 
 SIDES = ('right', 'left')
 SIDE_CN = {'right': '右', 'left': '左'}
@@ -220,6 +221,7 @@ def static_cast(bot, cfg):
 
 
 PLANS = {
+    'rope_archer': rope_archer,   # 绳边射手：有猴子长按 Shift，击退后持续移动回位
     'fixed_jump': fixed_jump,     # 保存版：固定先右后左各一次
     'random_jump': random_jump,   # 随机版：先后手/次数/纯跳/发呆都有随机
     'vision_jump': vision_jump,   # 截图判断版：名字牌定位，偏哪边就先打反方向

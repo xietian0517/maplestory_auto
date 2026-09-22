@@ -67,6 +67,7 @@ class Config:
     platform_right: int | None = None     # 平台右端，留空就按整个画面判断左右
     edge_margin: int = 60                 # 离两端不足这么多像素算贴边，先往中间挪
     rescue_scale: float = 2.0             # 贴边那一轮移动时长放大倍数（净往中间挪）
+    archer_profile: str = 'templates/rope_archer/profile.json'
 
 
 def main():

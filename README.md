@@ -1,5 +1,19 @@
 # 冒险岛怀旧服挂机脚本
 
+新增独立方案 **`rope_archer`（绳边射手 v1.4.0）**：右侧有猴子时持续按住 Shift，无怪松开；支持光圈辅助识别，击退后持续按住方向键回到平台内侧，移动按剩余距离提前松键。
+直接运行 `dist\MapleFarmArcher.exe` 或 `rope_archer_gui.py`，使用独立配置，不覆盖旧方案。
+模板、边界、使用步骤与限制见 [射手模板说明](templates/rope_archer/README.md)。截图只能降低走落风险，无法保证被怪物击退时绝不掉落。
+
+仓库包含 v1.4.0 的 Windows 发行包。克隆仓库或下载并解压整个仓库后，直接打开
+[`dist/MapleFarmArcher.exe`](dist/MapleFarmArcher.exe)，无需安装 Python。
+`dist/rope_archer_config.json` 是射手界面配置，`dist/templates/rope_archer/` 包含平台、人物、猴子和光圈图片及识别参数；移动发行包时请保留这些相对路径。
+源码运行的射手配置是根目录 `rope_archer_config.json`，原有名字牌图片在 `assets/`。
+修改配置后，运行中的程序会保存对应目录的配置文件。
+
+从源码构建：安装 `requirements.txt` 中的依赖及 PyInstaller，然后执行
+`python -m PyInstaller --noconfirm MapleFarmArcher.spec`。打包前可执行
+`python -m unittest discover -s tests -q` 进行离线测试，测试不会控制游戏。
+
 模拟玩家的键盘输入，按设定节奏跳起来攻击；同时每隔几秒截一张游戏画面，用**名字牌**认出主角
 在平台的左半边还是右半边，决定接下来往哪边打，避免越打越靠边掉下去。
 
@@ -18,7 +32,7 @@
 
 ## 还没实现
 
-- 不识别怪物、不寻路、不认地图名、不自动爬绳/走传送门
+- 旧方案不识别怪物；`rope_archer` 识别本次模板里的猴子。不寻路、不认地图名、不自动爬绳/走传送门
 - 不读游戏内存里的坐标（试过只读内存这条路，被客户端挡住了，已放弃）
 - 切地图、改窗口分辨率或缩放后需要重新标定；模板匹配只认标定时的画面尺寸
 

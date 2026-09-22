@@ -33,6 +33,7 @@ from farm import Config
 from autofarm.bot import Bot, BotStopped
 from autofarm import plans
 from autofarm import vision as V
+from autofarm.version import ARCHER_VERSION
 from autofarm.winapi import ElevationMismatch, WinApi, WindowBindError
 
 CONFIG_FILE = 'gui_config.json'
@@ -92,6 +93,7 @@ def _defaults():
     d['platform_right'] = '' if c.platform_right is None else str(c.platform_right)
     d['edge_margin'] = str(c.edge_margin)
     d['rescue_scale'] = str(c.rescue_scale)
+    d['archer_profile'] = c.archer_profile
     return d
 
 
@@ -144,6 +146,11 @@ class App(tk.Tk):
         self._var('plan', _defaults()['plan'])
         ttk.Combobox(top, width=22, state='readonly', textvariable=self.vars['plan'],
                      values=list(plans.PLANS)).grid(row=1, column=1, sticky='w', padx=4)
+        ttk.Button(top, text='载入绳边射手模板', command=self.on_archer_preset).grid(
+            row=1, column=2, padx=4)
+        ttk.Label(top, text='射手模板').grid(row=2, column=0, sticky='e', padx=4)
+        ttk.Entry(top, width=48, textvariable=self._var('archer_profile', _defaults()['archer_profile'])).grid(
+            row=2, column=1, columnspan=2, sticky='w', padx=4, pady=2)
 
         keys = ttk.LabelFrame(self, text='按键（小写键名，如 shift/alt/home/end/a）')
         keys.grid(row=1, column=0, sticky='we', padx=8, pady=2)
@@ -302,12 +309,31 @@ class App(tk.Tk):
             platform_right=opt_int('platform_right'),
             edge_margin=int(g('edge_margin')),
             rescue_scale=float(g('rescue_scale')),
+            archer_profile=g('archer_profile'),
         )
+
+    def on_archer_preset(self):
+        if self.alive:
+            return
+        self.vars['plan'].set('rope_archer')
+        self.vars['archer_profile'].set(Config().archer_profile)
+        self.vars['attack_key'].set('shift')
+        self.vision_on.set(True)
+        self.buff_on.set(False)
+        self.potion_on.set(False)
+        self._save()
+        self._log('[模板] 已载入绳边射手：使用独立模板里的边界和节奏；'
+                  '长按 Shift，无怪松开，持续移动回位。先点「试一下识别」。')
 
     # ---------- 截图标定 ----------
 
     def on_calibrate(self):
         """截屏标定：先框名字牌，再框平台范围。只截图，不发任何按键。"""
+        if self.vars['plan'].get() == 'rope_archer':
+            messagebox.showinfo('独立射手模板', '绳边射手已按参考图标定，使用上方射手模板路径。\n'
+                                '边界和节奏在 profile.json 中；此按钮仅标定旧方案。\n'
+                                '请点「试一下识别」检查当前画面。')
+            return
         try:
             cfg = self._build_config()
         except (ValueError, TypeError) as e:
@@ -315,12 +341,12 @@ class App(tk.Tk):
             return
         self._countdown(3, cfg)
 
-    def _countdown(self, left, cfg):
+    def _countdown(self, left, cfg, callback=None):
         if left > 0:
             self.status.set(f'{left} 秒后截图，请切回游戏窗口…')
-            self.after(1000, lambda: self._countdown(left - 1, cfg))
+            self.after(1000, lambda: self._countdown(left - 1, cfg, callback))
             return
-        self._do_calibrate(cfg)
+        (callback or self._do_calibrate)(cfg)
 
     def _grab(self, cfg):
         """抓一张客户区截图；窗口找不到或不在前台就报错。"""
@@ -373,6 +399,31 @@ class App(tk.Tk):
             cfg = self._build_config()
         except (ValueError, TypeError) as e:
             messagebox.showerror('参数错误', f'参数有误：{e}')
+            return
+        self._countdown(3, cfg, self._do_test_vision)
+
+    def _do_test_vision(self, cfg):
+        self.status.set('未运行')
+        if cfg.plan == 'rope_archer':
+            try:
+                from autofarm.rope_archer import RopeScene
+                scene = RopeScene(cfg.archer_profile)
+                frame = self._grab(cfg)
+                observation = scene.observe(frame)
+                folder = V.program_dir() / 'captures'
+                folder.mkdir(parents=True, exist_ok=True)
+                cv2.imencode('.png', frame)[1].tofile(str(folder / 'rope_archer_raw.png'))
+                out = folder / 'rope_archer_test.png'
+                cv2.imencode('.png', scene.annotate(frame, observation))[1].tofile(str(out))
+                text = observation.reason or (f'右侧有猴子（{observation.monkey_source}）：回到内侧并站稳后长按 Shift' if observation.monkey
+                                              else '右侧无猴子：不攻击')
+                if observation.player:
+                    text += f'；{observation.player_source}，人物匹配 {observation.player.score:.3f}'
+                self._log(f'[射手试识别 v{ARCHER_VERSION}] {text}；预览：{out}')
+                messagebox.showinfo('射手识别结果', f'{text}\n\n预览：{out}\n'
+                                    '红线=平台边界；橙线=主动右移上限；蓝线=回位目标。未发送按键。')
+            except Exception as e:
+                messagebox.showerror('射手试识别失败', str(e))
             return
         if not cfg.name_template:
             messagebox.showwarning('还没标定', '先点「截屏标定」框一下名字牌')
