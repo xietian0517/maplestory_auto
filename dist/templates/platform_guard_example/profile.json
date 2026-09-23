@@ -1,0 +1,70 @@
+{
+  "name": "猴子沼泽3 · 自定义示例",
+  "schema_version": 1,
+  "anchor_template": "anchor.png",
+  "player_template": "player.png",
+  "player_name": "CatApril",
+  "anchor_threshold": 0.94,
+  "monster_threshold": 0.86,
+  "monster_templates": [
+    "monster_0.png"
+  ],
+  "safe_left": -187.0,
+  "safe_right": 39.0,
+  "target_x": -9.0,
+  "target_tolerance": 20.0,
+  "max_speed": 350,
+  "player_roi": [
+    -232.0,
+    -124.0,
+    84.0,
+    644.0
+  ],
+  "monster_roi": [
+    -197.0,
+    266.0,
+    673.0,
+    364.0
+  ],
+  "calibration_boxes": {
+    "anchor": [
+      444,
+      111,
+      510,
+      137
+    ],
+    "player": [
+      462,
+      419,
+      511,
+      431
+    ],
+    "platform": [
+      290,
+      480,
+      516,
+      495
+    ],
+    "home": [
+      448,
+      460,
+      488,
+      470
+    ],
+    "observe": [
+      280,
+      390,
+      1150,
+      488
+    ]
+  },
+  "calibration_monsters": [
+    [
+      614,
+      410,
+      654,
+      457
+    ]
+  ],
+  "reference_image": "reference.png"
+}

@@ -61,6 +61,7 @@ INT_PARAMS = [                       # 整数参数
     ('micro_move_every', '施法N次微调'),
 ]
 PCT_PARAMS = [                       # 概率参数，UI 用 %
+    ('right_attack_prob', '向右攻击%'),
     ('extra_attack_prob', '多打1下%'),
     ('hop_prob', '纯跳一下%'),
     ('idle_prob', '轮间发呆%'),
@@ -306,6 +307,7 @@ class App(tk.Tk):
             buff_every_secs=sec('buff_every_secs'),
             buff_pause_secs=ms('buff_pause_secs'),
             extra_attack_prob=int(g('extra_attack_prob')) / 100.0,
+            right_attack_prob=float(g('right_attack_prob')) / 100.0,
             hop_prob=int(g('hop_prob')) / 100.0,
             idle_prob=int(g('idle_prob')) / 100.0,
             idle_secs=ms('idle_secs'),

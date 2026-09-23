@@ -48,8 +48,17 @@ class Config:
     # ---------- 定时 Buff（buff_key 不为 None 时生效，按时间不按攻击次数）----------
     buff_every_secs: tuple = (60.0, 90.0)      # 每隔多久按一次 Buff（随机区间，单位秒）
     buff_pause_secs: tuple = (0.3, 0.6)        # 按完 Buff 键后的停顿，等技能动作播完
+    buff_slots: tuple | None = None           # None 兼容旧单键；空元组关闭；多个槽位独立计时
+    buff_start_immediately: bool = False
+    buff_hold_secs: float = .12
+    guard_profile: str = ''
+    guard_player_name: str = ''
+    guard_direction: str = 'right'
+    guard_attack_key: str = 'shift'
+    guard_attack_range: float = 450
 
     # ---------- random_jump 方案专用（更随机的版本）----------
+    right_attack_prob: float = 0.5       # 每个基础攻击机会向右的概率；向左为 1 - 此值
     extra_attack_prob: float = 0.15       # 某一边多打1下的概率（0~1，0.15=约7次里1次）
     hop_prob: float = 0.05                # 插入一次纯跳不攻击的概率
     idle_prob: float = 0.08               # 整轮打完后随机发呆的概率

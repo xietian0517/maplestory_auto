@@ -106,13 +106,13 @@ class CustomSceneTests(TestCase):
         self.assertIsNone(o.player)
         self.assertIn('多个', o.reason)
 
-    def test_custom_picture_still_obeys_height_and_edge_checks(self):
+    def test_custom_picture_checks_horizontal_edge_only(self):
         for x, y in ((493, 419), (462, 460)):
             frame = self.frame.copy()
             frame[415:434, 450:520] = 30
             frame[y:y+12, x:x+49] = self.crop
             o = self.scene().observe(frame)
-            self.assertTrue(o.reason)
+            self.assertEqual(bool(o.reason), x == 493)
 
     def test_bad_binding_or_missing_file_cannot_revert_to_old_template(self):
         with self.assertRaises(ValueError):

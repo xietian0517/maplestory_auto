@@ -5,11 +5,14 @@
 写完注册到下面的 PLANS 字典，再把 farm.py 里的 plan 名字换掉即可。
 """
 import random
+import math
 import time
 
 from . import blocks as B
 from . import vision as V
 from .rope_archer import run as rope_archer
+from .buffs import BuffScheduler, run as buff_only
+from .platform_guard import run as platform_guard
 
 SIDES = ('right', 'left')
 SIDE_CN = {'right': '右', 'left': '左'}
@@ -22,15 +25,28 @@ def random_sides():
     return first, second
 
 
+def random_attack_counts(right_probability):
+    """Two base attack opportunities per round, each choosing its own direction."""
+    if not math.isfinite(right_probability) or not 0 <= right_probability <= 1:
+        raise ValueError('向右攻击概率必须在 0~100% 之间')
+    rights = sum(random.random() < right_probability for _ in range(2))
+    return {'right': rights, 'left': 2 - rights}
+
+
 def make_buff(cfg):
     """配置了 Buff 键就返回一个定时器，否则 None。"""
-    return B.Interval(cfg.buff_every_secs) if cfg.buff_key else None
+    return BuffScheduler(cfg)
 
 
 def maybe_buff(bot, cfg, buff):
     """每轮开头问一句：到点了就按一下 Buff 键。"""
-    if buff is not None and buff.due():
-        B.cast_buff(bot, cfg.buff_key, cfg.key_hold_secs, cfg.buff_pause_secs)
+    bot.gate()
+    if buff is not None:
+        buff.sync(bot)
+        # Service all due slots between rounds; timers remain independent.
+        for _ in buff.slots:
+            if not buff.cast_one(bot) or not buff.due():
+                break
 
 
 class BalancedDeck:
@@ -94,22 +110,29 @@ def random_jump(bot, cfg):
     """【随机版】在 fixed_jump 基础上加大随机性：
 
     - 先后手随机（一半先右一半先左）
-    - 每边 1 下为主，小概率多打 1 下（extra_attack_prob）
+    - 每轮两个基础攻击机会，各自按 right_attack_prob 选择左右方向
+    - 每个基础攻击机会可追加 1 下，同方向施放（extra_attack_prob）
     - 小概率插入一次纯跳不攻击（hop_prob，模拟跳跃走位）
     - 小概率整轮打完发呆一会儿（idle_prob）
-    每轮左右移动仍共用同一随机时长，保证回原位不漂移。
+    每轮左右移动仍共用同一随机时长；方向没分到攻击时只移动，不攻击。
     """
     potion = B.Every(cfg.potion_every) if cfg.potion_key else None
     buff = make_buff(cfg)
     round_no = 0
+    probability = cfg.right_attack_prob
+    if not math.isfinite(probability) or not 0 <= probability <= 1:
+        raise ValueError('向右攻击概率必须在 0~100% 之间')
+    bot.log(f'[方向概率] 左 {(1 - probability) * 100:g}% / 右 {probability * 100:g}%（实际攻击方向）')
     while True:
         round_no += 1
         maybe_buff(bot, cfg, buff)
         move_secs = B.rnd(cfg.move_secs)
+        counts = random_attack_counts(probability)
         for side in random_sides():
             B.move(bot, side, move_secs)
             B.settle(bot, cfg.settle_secs)
-            times = 1 + (1 if random.random() < cfg.extra_attack_prob else 0)
+            base = counts[side]
+            times = base + sum(random.random() < cfg.extra_attack_prob for _ in range(base))
             for i in range(1, times + 1):
                 B.jump_attack(bot, cfg.jump_key, cfg.attack_key,
                               cfg.jump_hold_secs, cfg.jump_rise_secs,
@@ -221,6 +244,8 @@ def static_cast(bot, cfg):
 
 
 PLANS = {
+    'platform_guard': platform_guard,
+    'buff_only': buff_only,
     'rope_archer': rope_archer,   # 绳边射手：有猴子长按 Shift，击退后持续移动回位
     'fixed_jump': fixed_jump,     # 保存版：固定先右后左各一次
     'random_jump': random_jump,   # 随机版：先后手/次数/纯跳/发呆都有随机

@@ -7,6 +7,7 @@
 - 绑定窗口后先校验权限：游戏以管理员运行时本程序也必须提权，否则白跑
 """
 import time
+import queue
 
 from .winapi import ElevationMismatch, WinApi
 
@@ -26,6 +27,8 @@ class Bot:
         self.paused = True          # 启动即暂停，等 F12
         self.quitting = False
         self.held = set()          # 已发下、还没发上的键，退出时兜底松开
+        self.buff_commands = queue.Queue()
+        self.buff_status = '等待开始'
         # 预热热键状态，避免启动瞬间把残留状态当成一次按下
         self._prev = {
             'f12': self.api.async_pressed('f12'),

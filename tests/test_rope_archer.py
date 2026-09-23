@@ -54,7 +54,8 @@ class ControllerTests(TestCase):
         o = replace(self.o, player=Hit(400, 522.5, 1), monkey=None)
         key, lease, _ = self.stable(o)
         self.assertEqual(key, 'right')
-        self.assertGreater(lease, .2)
+        self.assertGreater(lease, .1)
+        self.assertLessEqual(400 + lease * self.c.d['max_speed'], 457)
         for i, x in enumerate((420, 430, 440, 450)):
             action = self.step(replace(o, player=Hit(x, 522.5, 1)), .1 + i * .1)
             self.assertEqual(action[0], 'right')
@@ -127,12 +128,12 @@ class ControllerTests(TestCase):
         self.assertIsNone(self.step(o, .08))
         self.assertEqual(self.step(o, .18)[0], 'shift')
 
-    def test_new_fight_and_focus_reset_require_new_turn_confirmation(self):
+    def test_wait_preserves_facing_but_focus_reset_requires_new_confirmation(self):
         self.begin_attack()
         self.step(replace(self.o, monkey=None), .3)
         self.step(replace(self.o, monkey=None), 1.0)
         action = self.step(self.o, 1.1)
-        self.assertNotEqual(action[0], 'shift')
+        self.assertEqual(action[0], 'shift')
         self.c.reset()
         self.assertIsNone(self.step(self.o, 1.2))
         self.assertNotEqual(self.step(self.o, 1.3)[0], 'shift')
@@ -162,10 +163,10 @@ class ControllerTests(TestCase):
     def test_turn_near_guard_band_first_retreats(self):
         self.assertEqual(self.stable(replace(self.o, player=Hit(480, 522.5, 1)))[0], 'left')
 
-    def test_starting_on_uneven_ground_recovers_after_stability(self):
+    def test_starting_on_uneven_ground_moves_after_two_observations(self):
         o = replace(self.o, player=Hit(400, 528, 1), monkey=None)
-        self.assertIsNone(self.stable(o))
-        self.assertIsNone(self.step(o, .1))
+        self.assertEqual(self.stable(o)[0], 'right')
+        self.assertEqual(self.step(o, .1)[0], 'right')
         self.assertEqual(self.step(o, .2)[0], 'right')
 
     def test_small_ground_undulations_do_not_interrupt_continuous_movement(self):
@@ -175,37 +176,38 @@ class ControllerTests(TestCase):
                                      (420, 528.5), (430, 525.5), (440, 522.5))):
             self.assertEqual(self.step(replace(o, player=Hit(x, y, 1)), .1 + i * .1)[0], 'right')
 
-    def test_knockup_lands_on_different_height_then_attacks_without_left_turn(self):
+    def test_knockup_does_not_interrupt_confirmed_right_attack(self):
         self.begin_attack()
         o = replace(self.o, monkey=Hit(700, 516, 1))
         for x, y, now in ((435, 502.5, .3), (430, 507.5, .4), (430, 516.5, .5),
                            (430, 525.5, .56), (430, 527.5, .62)):
-            self.assertIsNone(self.step(replace(o, player=Hit(x, y, 1)), now))
+            self.assertEqual(self.step(replace(o, player=Hit(x, y, 1)), now)[0], 'shift')
             self.assertTrue(self.c.facing_right)
         self.assertEqual(self.step(replace(o, player=Hit(430, 527, 1)), .75)[0], 'shift')
 
-    def test_stable_airborne_apex_or_lower_floor_is_not_ground(self):
-        for offset in (-20, 60):
+    def test_large_height_offsets_do_not_block_recovery(self):
+        for offset in (-200, -20, 60, 200):
             self.c.reset()
-            o = replace(self.o, player=Hit(430, 522.5 + offset, 1), monkey=Hit(700, 516, 1))
-            for now in (0, .1, .2, .4, 1):
-                self.assertIsNone(self.step(o, now))
+            o = replace(self.o, player=Hit(430, 522.5 + offset, 1), monkey=None)
+            self.assertIsNone(self.step(o, 0))
+            for now in (.1, .2, .4, 1):
+                self.assertEqual(self.step(o, now)[0], 'right')
 
-    def test_passing_ground_height_does_not_end_airborne_wait(self):
+    def test_changing_height_does_not_pause_attack(self):
         self.begin_attack()
         o = replace(self.o, monkey=Hit(700, 516, 1))
         for y, now in ((502.5, .3), (519, .4), (522, .46), (525, .52), (528, .58), (531, .64)):
-            self.assertIsNone(self.step(replace(o, player=Hit(430, y, 1)), now))
+            self.assertEqual(self.step(replace(o, player=Hit(430, y, 1)), now)[0], 'shift')
 
-    def test_unconfirmed_right_motion_while_airborne_cannot_authorize_attack(self):
+    def test_right_turn_confirmation_ignores_vertical_motion(self):
         self.stable(self.o)
         o = replace(self.o, player=Hit(469, 502.5, 1))
         self.assertIsNone(self.step(o, .1))
-        self.assertFalse(self.c.facing_right)
-        o = replace(o, player=Hit(469, 522.5, 1))
+        self.assertTrue(self.c.facing_right)
+        o = replace(o, player=Hit(469, 582.5, 1))
         for now in (.2, .3, .4):
             action = self.step(o, now)
-            self.assertTrue(action is None or action[0] != 'shift')
+            self.assertEqual(action[0], 'shift')
 
     def test_blind_hold_with_release_delay_and_position_error_stays_in_home_band(self):
         d = self.c.d
@@ -223,6 +225,83 @@ class ControllerTests(TestCase):
                 self.assertLessEqual(x + travel, 483 + 1e-6)
             else:
                 self.assertGreaterEqual(x - travel, 443 - 1e-6)
+
+    def test_both_recovery_directions_cap_motion_at_stop_point(self):
+        for x, direction in [(400, 'right'), (500, 'left')]:
+            self.c.reset()
+            o = replace(self.o, player=Hit(x, 522.5, 1), monkey=None)
+            action = self.stable(o)
+            self.assertEqual(action[0], direction)
+            travelled = action[1] * self.c.d['max_speed']
+            self.assertLessEqual(travelled, abs(x - 457))
+
+    def test_arrival_band_stops_without_requiring_exact_target(self):
+        for start, arrival in [(400, 451), (500, 463)]:
+            self.c.reset()
+            self.stable(replace(self.o, player=Hit(start, 522.5, 1), monkey=None))
+            self.assertIsNone(self.step(replace(self.o, player=Hit(arrival, 522.5, 1), monkey=None), .1))
+            self.assertIsNone(self.c.moving)
+            for i, noise in enumerate((-3, 2, -1, 3, 0)):
+                o = replace(self.o, player=Hit(arrival + noise, 522.5, 1), monkey=None)
+                self.assertIsNone(self.step(o, .3 + i * .1))
+
+    def test_repeated_enemy_gaps_do_not_cause_more_turns(self):
+        self.begin_attack()
+        for now in (2, 10, 20, 80, 100):
+            self.assertIsNone(self.step(replace(self.o, monkey=None), now))
+            self.assertEqual(self.step(self.o, now + 1)[0], 'shift')
+
+    def test_expired_short_motion_keeps_confirmed_facing(self):
+        self.begin_attack()
+        self.c.motion_stopped(.3)
+        self.assertTrue(self.c.facing_right)
+        self.assertIsNone(self.step(self.o, .4))
+        self.assertEqual(self.step(self.o, .5)[0], 'shift')
+
+    def test_right_recovery_with_confirmed_facing_does_not_block_buff(self):
+        self.begin_attack()
+        self.step(replace(self.o, player=Hit(400, 522.5, 1), monkey=None), .3)
+        self.assertIsNone(self.c.turn_origin)
+        o = replace(self.o, player=Hit(452, 522.5, 1), monkey=None)
+        self.assertIsNone(self.step(o, .4))
+        action = self.step(o, .6)
+        self.assertTrue(self.c.can_buff(o, .6, action))
+
+    def test_closed_loop_recovery_does_not_oscillate(self):
+        # 模拟快慢移动、不同截图间隔、定位抖动与 20ms 松键延迟。
+        for start in (400., 500.):
+            for speed in (80, 180, 350):
+                for dt in (.04, .08, .12):
+                    with self.subTest(start=start, speed=speed, dt=dt):
+                        controller = ArcherController(self.scene.data)
+                        x, directions, attacked = start, [], False
+                        last_motion = None
+                        for frame in range(450):
+                            now = frame * dt
+                            noise = (-1, 0, 1, 0)[frame % 4]
+                            monkey = Hit(700, 516, 1) if frame % 100 >= 30 else None
+                            o = replace(self.o, player=Hit(x + noise, 522.5, 1), monkey=monkey)
+                            action = controller.decide(o, now)
+                            motion = action[0] if action and action[0] in ('left', 'right') else None
+                            if motion:
+                                if not directions or directions[-1] != motion:
+                                    directions.append(motion)
+                                controller.applied(motion, o, now)
+                                duration = min(dt, action[1])
+                                x += (1 if motion == 'right' else -1) * speed * duration
+                                if action[1] < dt:
+                                    x += (1 if motion == 'right' else -1) * speed * .02
+                                    motion = None
+                            elif last_motion:
+                                x += (1 if last_motion == 'right' else -1) * speed * .02
+                            if action and action[0] == 'shift':
+                                self.assertTrue(controller.facing_right)
+                                attacked = True
+                            last_motion = motion
+                            self.assertTrue(285 <= x <= 511, (x, directions))
+                        self.assertEqual(directions, ['right'] if start == 400 else ['left', 'right'])
+                        self.assertTrue(attacked)
+                        self.assertTrue(443 <= x <= 483, x)
 
 
 class SceneTests(TestCase):
@@ -343,11 +422,11 @@ class SceneTests(TestCase):
         self.assertFalse(o.reason)
         controller = ArcherController(self.scene.data)
         self.assertIsNone(controller.decide(o, 0))
-        self.assertIsNone(controller.decide(o, .2))
-        self.assertIn('等待落地', controller.wait_reason)
+        self.assertEqual(controller.decide(o, .2)[0], 'right')
+        self.assertNotIn('落地', controller.wait_reason)
 
-    def test_dropped_player_stops(self):
-        self.assertTrue(self.scene.observe(self.frame(player_y=582.5)).reason)
+    def test_lower_player_is_not_rejected_by_height(self):
+        self.assertFalse(self.scene.observe(self.frame(player_y=582.5)).reason)
 
     def test_player_outside_safety_bounds_stops(self):
         self.assertTrue(self.scene.observe(self.frame(player_x=520)).reason)
@@ -463,11 +542,11 @@ class SceneTests(TestCase):
         self.assertIsNone(o.player)
         self.assertTrue(o.reason)
 
-    def test_partial_recognition_still_checks_floor_and_edge(self):
+    def test_partial_recognition_checks_horizontal_edge_only(self):
         for x, y in [(520, 522.5), (500, 582.5)]:
             with self.subTest(x=x, y=y):
                 o = self.scene.observe(self.occluded_frame('archer_name_occluded_close.png', (35, 132.5), x, y))
-                self.assertTrue(o.reason)
+                self.assertEqual(bool(o.reason), x == 520)
                 self.assertIsNotNone(o.player)
 
 
@@ -597,7 +676,7 @@ class CaptureSafetyTests(TestCase):
              mock.patch('autofarm.rope_archer.V.capture'), \
              mock.patch('autofarm.rope_archer.time.monotonic', side_effect=[10, 10 + duration]):
             with self.assertRaises(BotStopped):
-                run(bot, Config())
+                run(bot, Config(buff_slots=()))
         return controller, inputs
 
     def test_slow_frame_releases_and_does_not_act(self):

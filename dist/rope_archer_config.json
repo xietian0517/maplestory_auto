@@ -43,8 +43,8 @@
  "edge_margin": "60",
  "rescue_scale": "2.0",
  "archer_profile": "templates/rope_archer/profile.json",
- "vision_enabled": true,
- "archer_player_name": "",
+ "archer_player_name": "CatApril",
  "archer_name_template": "",
- "archer_template_owner": ""
+ "archer_template_owner": "",
+ "vision_enabled": true
 }

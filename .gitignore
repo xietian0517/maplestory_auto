@@ -5,6 +5,7 @@ captures/
 user_templates/
 config.json
 gui_config.json
+unified_config.json
 /dist/*
 build/
 冒险岛online/
@@ -22,3 +23,8 @@ build/
 !assets/
 /assets/*
 !/assets/name_CatApril.png
+
+
+
+!/dist/MapleFarmUnified-v2.2.0.exe
+!/dist/unified_config.json
