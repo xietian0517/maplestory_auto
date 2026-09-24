@@ -17,7 +17,7 @@ from buff_gui import App as BuffApp, DEFAULT_SLOTS
 from autofarm.buffs import parse_slots
 from autofarm.winapi import VK_CODES
 
-VERSION = '2.2.0'
+VERSION = '2.2.3'
 CONFIG_FILE = 'unified_config.json'
 MODES = {'random_jump': '随机跳攻 · 野猪领地1',
          'rope_archer': '绳边射手 · 猴子沼泽3',
@@ -272,7 +272,7 @@ class UnifiedApp(ArcherApp):
         ttk.Label(settings, text='攻击方向').grid(row=4, column=0, sticky='w', padx=8, pady=5)
         ttk.Combobox(settings, textvariable=self.vars['guard_direction'], values=('right', 'left', 'both'),
                      state='readonly', width=10).grid(row=4, column=1, sticky='w', padx=8)
-        ttk.Label(panel, text='right=只向右；left=只向左；both=两侧，优先清理当前方向。\n框选参照物、名字、平台边界、停靠范围、观察区域及怪物。\n名字留空使用标定图片；高度不拦截动作。', padding=8).pack(anchor='w')
+        ttk.Label(panel, text='right=只向右；left=只向左；both=两侧，优先清理当前方向。\n三步标定：参照物 → 人物名字 → 观察区域与怪物框。\n先站到希望守台的位置再截图；名字留空使用图片识别。', padding=8).pack(anchor='w')
         actions = ttk.Frame(panel)
         actions.pack(fill='x', padx=8)
         for label, command in [('截图标定（3秒）', self._guard_capture), ('粘贴画面标定', self._guard_clipboard),
@@ -390,7 +390,7 @@ class UnifiedApp(ArcherApp):
             self._log(f'[守台测试] {result}；预览：{output}')
             from guard_template_gui import show_preview
             show_preview(self, Image.fromarray(cv2.cvtColor(scene.annotate(frame, o), cv2.COLOR_BGR2RGB)),
-                         f'{result}\n红线：平台边界；蓝线：期望位置；黄圈：怪物。已保存：{output}')
+                         f'{result}\n红线：回位限制（旧方案为平台边界）；蓝线：回位位置；黄圈：怪物。已保存：{output}')
         except Exception as error:
             messagebox.showerror('守台测试失败', str(error), parent=self)
         self.status.set('未运行')

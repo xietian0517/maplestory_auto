@@ -29,9 +29,9 @@ def validate_monster(image):
 
 def save_calibration(image, boxes, monsters, name, player_name='', root=None):
     image = prepare_image(image)
-    for key in ('anchor', 'player', 'platform', 'home', 'observe'):
+    for key in ('anchor', 'player', 'observe'):
         if key not in boxes:
-            raise ValueError('请完成参照物、人物名字、平台、停靠和观察区域的标定')
+            raise ValueError('请完成三步：参照物、人物名字、观察区域与怪物框')
     for box in [*boxes.values(), *monsters]:
         x1, y1, x2, y2 = box
         if not 0 <= x1 < x2 <= image.width or not 0 <= y1 < y2 <= image.height:
@@ -48,8 +48,14 @@ def save_calibration(image, boxes, monsters, name, player_name='', root=None):
     ay = (boxes['anchor'][1]+boxes['anchor'][3])/2
     def relative(box):
         return [v - (ax if i % 2 == 0 else ay) for i, v in enumerate(box)]
-    platform, home = boxes['platform'], boxes['home']
-    d = dict(name=name.strip() or '自定义守台', schema_version=1, anchor_template='anchor.png',
+    simple = 'platform' not in boxes or 'home' not in boxes
+    px = (boxes['player'][0] + boxes['player'][2]) / 2
+    # A recovery envelope is not a detected platform edge. Never derive walking
+    # boundaries from the monster observation area (which can cross gaps).
+    platform = (px-90, 0, px+90, image.height) if simple else boxes['platform']
+    home = (px-20, 0, px+20, image.height) if simple else boxes['home']
+    d = dict(name=name.strip() or '自定义守台', schema_version=2 if simple else 1,
+             calibration_mode='three_step' if simple else 'platform', anchor_template='anchor.png',
              player_template='player.png', player_name=player_name.strip(),
              anchor_threshold=.94, monster_threshold=.86,
              monster_templates=[f'monster_{i}.png' for i in range(len(monsters))],
@@ -122,21 +128,20 @@ class MonsterCropDialog(NameCropDialog):
 
 class GuardCalibrationDialog(tk.Toplevel):
     ROLES = [('anchor', '1. 固定参照物'), ('player', '2. 人物名字一行'),
-             ('platform', '3. 平台左右边界'), ('home', '4. 期望停靠范围'), ('observe', '5. 怪物观察区域')]
+             ('observe', '3. 观察区域与怪物')]
     TIPS = {'anchor': '框选附近固定不动的平台纹理，避免树叶、人物或特效。',
-            'player': '紧贴自己的完整名字框一行，左右留白对称。',
-            'platform': '框出角色可站立的平台；左右边框就是移动边界，勿包含断崖。',
-            'home': '框出期望停留的一段范围，宽至少 40px，左右离平台边界各超过 20px。',
-            'observe': '框出左右需要监视的怪物区域，排除其他台子。',
-            'monster': '拖动框选一个怪物身体、头部或光圈；可以连续添加多个框。'}
+            'player': '紧贴自己的完整名字框一行；截图时的位置会自动记为回位位置。',
+            'observe': '先框出要监视的区域，松开后继续框怪物；排除其他台子。',
+            'monster': '第 3 步：框一个怪物身体、头部或光圈；可连续添加，完成后保存。'}
 
     def __init__(self, parent, image, on_save, player_name='', existing=None):
         super().__init__(parent)
-        self.title('自定义守台 · 标定平台与怪物')
+        self.title('自定义守台 · 三步标定')
         self.transient(parent)
         self.image = prepare_image(image)
         self.on_save, self.player_name = on_save, player_name
-        self.boxes = dict((existing or {}).get('calibration_boxes', {}))
+        self.boxes = {k: v for k, v in (existing or {}).get('calibration_boxes', {}).items()
+                      if k in ('anchor', 'player', 'observe')}
         self.monsters = list((existing or {}).get('calibration_monsters', []))
         self.extra_paths = []
         if existing and existing.get('_profile_path'):
@@ -148,6 +153,7 @@ class GuardCalibrationDialog(tk.Toplevel):
         top.pack(fill='x', padx=10, pady=8)
         ttk.Label(top, text='方案名').pack(side='left')
         ttk.Entry(top, textvariable=self.name, width=32).pack(side='left', padx=8)
+        ttk.Label(top, text='截图站位即回位位置').pack(side='left')
         buttons = ttk.Frame(self)
         buttons.pack(fill='x', padx=8)
         for role, label in self.ROLES:
@@ -167,7 +173,7 @@ class GuardCalibrationDialog(tk.Toplevel):
         ttk.Label(self, textvariable=self.summary, padding=8).pack(anchor='w')
         bottom = ttk.Frame(self)
         bottom.pack(fill='x', padx=8, pady=8)
-        ttk.Button(bottom, text='6. 添加怪物框', command=lambda: self.choose('monster')).pack(side='left')
+        ttk.Button(bottom, text='添加怪物框（第 3 步）', command=lambda: self.choose('monster')).pack(side='left')
         ttk.Button(bottom, text='撤销最后一个怪物', command=self.undo).pack(side='left', padx=6)
         ttk.Button(bottom, text='保存为新方案', command=self.save).pack(side='right')
         ttk.Button(bottom, text='取消', command=self.destroy).pack(side='right', padx=6)
@@ -176,9 +182,11 @@ class GuardCalibrationDialog(tk.Toplevel):
 
     def choose(self, role):
         self.active = role
+        self.start = self.selection = None
         self.tip.set(self.TIPS[role])
 
     def press(self, event):
+        self.selection = None
         self.start = (event.x, event.y)
 
     def drag(self, event):
@@ -193,7 +201,10 @@ class GuardCalibrationDialog(tk.Toplevel):
                 self.monsters.append(self.selection)
             else:
                 self.boxes[self.active] = self.selection
+            next_role = {'anchor': 'player', 'player': 'observe', 'observe': 'monster'}.get(self.active)
             self.selection, self.start = None, None
+            if next_role:
+                self.choose(next_role)
             self.draw()
 
     def undo(self):
@@ -210,8 +221,12 @@ class GuardCalibrationDialog(tk.Toplevel):
         for name, (x1, y1, x2, y2) in items:
             color = {'platform': '#ff5050', 'home': '#40ffb0', 'monster': '#ffff40'}.get(name, '#40c8ff')
             self.canvas.create_rectangle(x1*sx, y1*sy, x2*sx, y2*sy, outline=color, width=2, tags='boxes')
-            self.canvas.create_text(x1*sx+3, y1*sy+3, text=name, fill=color, anchor='nw', tags='boxes')
-        self.summary.set(f'已标定 {len(self.boxes)}/5 项；怪物框 {len(self.monsters)} 个，保留追加图片 {len(self.extra_paths)} 张。')
+            label = {'anchor': '参照物', 'player': '人物名字', 'observe': '观察区域',
+                     'monster': '怪物', 'selection': '框选中'}.get(name, name)
+            self.canvas.create_text(x1*sx+3, y1*sy+3, text=label, fill=color, anchor='nw', tags='boxes')
+        complete = sum(k in self.boxes for k in ('anchor', 'player'))
+        complete += int('observe' in self.boxes and bool(self.monsters))
+        self.summary.set(f'已完成 {complete}/3 步；怪物框 {len(self.monsters)} 个，保留追加图片 {len(self.extra_paths)} 张。')
 
     def save(self):
         try:

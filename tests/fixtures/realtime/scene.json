@@ -1,0 +1,218 @@
+{
+  "request_id": "becdda3fe92f4c4d8f2609ef0bb46faa",
+  "map_name": "猴子森林1中层",
+  "width": 1366,
+  "height": 768,
+  "play_area": [
+    0,
+    0,
+    1366,
+    693
+  ],
+  "player_name_box": [
+    642,
+    435,
+    689,
+    445
+  ],
+  "player_foot_offset": -10,
+  "monster_boxes": [
+    [
+      292,
+      495,
+      337,
+      543
+    ],
+    [
+      426,
+      492,
+      477,
+      543
+    ],
+    [
+      1165,
+      490,
+      1221,
+      543
+    ],
+    [
+      438,
+      133,
+      488,
+      185
+    ]
+  ],
+  "exclude_boxes": [
+    [
+      0,
+      0,
+      126,
+      185
+    ],
+    [
+      768,
+      285,
+      919,
+      410
+    ],
+    [
+      632,
+      463,
+      672,
+      510
+    ]
+  ],
+  "platforms": [
+    {
+      "id": "left_high",
+      "left": 0,
+      "right": 514,
+      "y": 190
+    },
+    {
+      "id": "left_mid",
+      "left": 0,
+      "right": 514,
+      "y": 370
+    },
+    {
+      "id": "left_lower",
+      "left": 0,
+      "right": 514,
+      "y": 550
+    },
+    {
+      "id": "right_mid",
+      "left": 1110,
+      "right": 1366,
+      "y": 370
+    },
+    {
+      "id": "right_lower",
+      "left": 1110,
+      "right": 1366,
+      "y": 550
+    },
+    {
+      "id": "c0",
+      "left": 569,
+      "right": 697,
+      "y": 490
+    },
+    {
+      "id": "c1",
+      "left": 656,
+      "right": 784,
+      "y": 430
+    },
+    {
+      "id": "c2",
+      "left": 749,
+      "right": 877,
+      "y": 370
+    },
+    {
+      "id": "c3",
+      "left": 656,
+      "right": 784,
+      "y": 310
+    },
+    {
+      "id": "c4",
+      "left": 931,
+      "right": 1059,
+      "y": 310
+    },
+    {
+      "id": "c5",
+      "left": 838,
+      "right": 966,
+      "y": 250
+    },
+    {
+      "id": "c6",
+      "left": 749,
+      "right": 877,
+      "y": 190
+    },
+    {
+      "id": "c7",
+      "left": 838,
+      "right": 966,
+      "y": 130
+    },
+    {
+      "id": "c8",
+      "left": 749,
+      "right": 877,
+      "y": 70
+    },
+    {
+      "id": "c9",
+      "left": 838,
+      "right": 966,
+      "y": 10
+    },
+    {
+      "id": "bottom_mid",
+      "left": 749,
+      "right": 1140,
+      "y": 610
+    },
+    {
+      "id": "left_bottom",
+      "left": 298,
+      "right": 426,
+      "y": 670
+    }
+  ],
+  "ropes": [
+    {
+      "x": 890,
+      "top": 250,
+      "bottom": 550
+    },
+    {
+      "x": 398,
+      "top": 370,
+      "bottom": 490
+    },
+    {
+      "x": 455,
+      "top": 550,
+      "bottom": 670
+    },
+    {
+      "x": 1218,
+      "top": 370,
+      "bottom": 490
+    },
+    {
+      "x": 303,
+      "top": 190,
+      "bottom": 310
+    },
+    {
+      "x": 363,
+      "top": 670,
+      "bottom": 693
+    },
+    {
+      "x": 790,
+      "top": 610,
+      "bottom": 693
+    },
+    {
+      "x": 1040,
+      "top": 610,
+      "bottom": 693
+    }
+  ],
+  "preferred_platforms": [
+    "left_lower",
+    "left_mid",
+    "right_lower"
+  ],
+  "confidence": 0.91,
+  "reasoning": "角色在中间阶梯 c1 左端，测量后经 c0 跳向左侧宽平台清怪，使用可见绳梯继续导航。"
+}

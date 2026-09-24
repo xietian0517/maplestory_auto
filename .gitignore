@@ -28,3 +28,6 @@ build/
 
 !/dist/MapleFarmUnified-v2.2.0.exe
 !/dist/unified_config.json
+!/dist/MapleFarmUnified-v2.2.1.exe
+!/dist/MapleFarmUnified-v2.2.2.exe
+!/dist/MapleFarmUnified-v2.2.3.exe

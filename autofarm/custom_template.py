@@ -76,14 +76,17 @@ class CustomNameFinder(V.NameFinder):
         super().__init__(path, .94)
         validate_template(Image.fromarray(cv2.cvtColor(self.template, cv2.COLOR_BGR2RGB)))
         self.ambiguous = False
+        self.best_score = 0.0
 
     def find(self, frame):
         self.ambiguous = False
+        self.best_score = 0.0
         h, w = self.template.shape[:2]
         if frame.shape[0] < h or frame.shape[1] < w:
             return None
         scores = cv2.matchTemplate(frame, self.template, cv2.TM_CCOEFF_NORMED)
         _, score, _, (x, y) = cv2.minMaxLoc(scores)
+        self.best_score = float(score) if np.isfinite(score) else 0.0
         if not np.isfinite(score) or score < self.threshold:
             return None
         scores[max(0, y-4):y+5, max(0, x-4):x+5] = -1

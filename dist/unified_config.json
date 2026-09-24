@@ -1,8 +1,8 @@
 {
   "window_title": "冒险岛怀旧服",
-  "plan": "random_jump",
+  "plan": "buff_only",
   "potion_enabled": false,
-  "buff_enabled": false,
+  "buff_enabled": true,
   "jump_hold_secs_min": "40",
   "jump_hold_secs_max": "80",
   "jump_rise_secs_min": "30",
@@ -28,6 +28,7 @@
   "attacks_per_side": "1",
   "potion_every": "15",
   "micro_move_every": "25",
+  "right_attack_prob": "50",
   "extra_attack_prob": "10",
   "hop_prob": "1",
   "idle_prob": "1",
@@ -46,6 +47,12 @@
   "archer_player_name": "CatApril",
   "archer_name_template": "",
   "archer_template_owner": "",
+  "guard_profile": "user_templates/guards/5aad01cbd7bf/profile.json",
+  "guard_player_name": "",
+  "guard_direction": "right",
+  "guard_attack_key": "shift",
+  "guard_attack_range": "450",
+  "buff_hold_ms": "120",
   "vision_enabled": true,
   "buff_slots": [
     {
@@ -56,5 +63,6 @@
       "pmax": "0.6"
     }
   ],
-  "version": "2.0.0"
+  "version": "2.2.2",
+  "buff_start_immediately": true
 }
