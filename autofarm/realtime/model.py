@@ -72,6 +72,7 @@ class Scene:
     confidence: float
     reasoning: str
     source: str = 'external_gpt'
+    hud_boxes: list = field(default_factory=list)
 
     def to_data(self):
         def box(b): return [b.x1,b.y1,b.x2,b.y2]
@@ -79,7 +80,8 @@ class Scene:
                     play_area=box(self.play_area),player_name_box=box(self.name_box),player_foot_offset=self.foot_offset,
                     monster_boxes=[box(b) for b in self.monsters],exclude_boxes=[box(b) for b in self.exclusions],
                     platforms=[vars(p) for p in self.platforms],ropes=[vars(r) for r in self.ropes],
-                    preferred_platforms=self.preferred,confidence=self.confidence,reasoning=self.reasoning)
+                    preferred_platforms=self.preferred,confidence=self.confidence,reasoning=self.reasoning,
+                    hud_boxes=[box(b) for b in self.hud_boxes])
 
     @classmethod
     def parse(cls, data, request_id, width, height):
@@ -98,6 +100,9 @@ class Scene:
         if not isinstance(exclusions, list) or len(exclusions) > 30:
             raise ValueError('Too many exclusions')
         exclusions = [Box.parse(x, width, height) for x in exclusions]
+        hud=data.get('hud_boxes',[])
+        if not isinstance(hud,list) or len(hud)>12:raise ValueError('Too many HUD boxes')
+        hud=[Box.parse(x,width,height) for x in hud]
         for b in [name, *monsters]:
             if b.x1 < area.x1 or b.x2 > area.x2 or b.y1 < area.y1 or b.y2 > area.y2:
                 raise ValueError('Entity outside play area')
@@ -128,7 +133,7 @@ class Scene:
             raise ValueError('Invalid explanation')
         return cls(request_id, data['map_name'], width, height, area, name, offset,
                    monsters, exclusions, platforms, ropes, preferred,
-                   number(data['confidence'], 0, 1), data['reasoning'])
+                   number(data['confidence'], 0, 1), data['reasoning'],hud_boxes=hud)
 
 
 @dataclass(frozen=True)
@@ -152,6 +157,8 @@ class Observation:
     map_epoch: int = 0
     motion_valid: bool = True
     navigation_targets: list = field(default_factory=list)
+    minimap_goals: list = field(default_factory=list)
+    position_quantum: float = 0
 
 
 @dataclass(frozen=True)

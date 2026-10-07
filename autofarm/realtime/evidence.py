@@ -16,11 +16,11 @@ class EvidenceRecorder:
         self.dropped=0; self.error=None; self.thread=None
         self.bound_scenes=set()
 
-    def bind_scene(self,scene,seed):
+    def bind_scene(self,scene,seed,world_data=None,minimap_calibration=None):
         if scene.request_id in self.bound_scenes: return
         # Scene changes are rare. Preserve the exact seed/annotations associated
         # with each frame so later replanning cannot invalidate old recordings.
-        self.queue.put(('scene',(scene.to_data(),seed.copy())),timeout=2)
+        self.queue.put(('scene',(scene.to_data(),seed.copy(),world_data,minimap_calibration)),timeout=2)
         self.bound_scenes.add(scene.request_id)
 
     def preview(self,image):
@@ -53,11 +53,13 @@ class EvidenceRecorder:
                         continue
                     if kind=='scene':
                         from .semantic import atomic_json
-                        scene,seed=payload; dest=self.folder/'scenes'/scene['request_id']; dest.mkdir(parents=True,exist_ok=True)
+                        scene,seed,world_data,minimap_calibration=payload; dest=self.folder/'scenes'/scene['request_id']; dest.mkdir(parents=True,exist_ok=True)
                         ok,png=cv2.imencode('.png',seed)
                         if not ok: raise OSError('Could not encode replay seed')
                         raw=png.tobytes(); (dest/'seed.png').write_bytes(raw)
                         atomic_json(dest/'scene.json',scene)
+                        if world_data is not None:atomic_json(dest/'world_geometry.json',world_data)
+                        if minimap_calibration is not None:atomic_json(dest/'minimap_calibration.json',minimap_calibration)
                         atomic_json(dest/'request.json',dict(request_id=scene['request_id'],width=scene['width'],height=scene['height'],
                             image='seed.png',image_sha256=hashlib.sha256(raw).hexdigest()))
                         continue

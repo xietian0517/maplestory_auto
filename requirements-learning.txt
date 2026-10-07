@@ -1,0 +1,3 @@
+# Optional offline demonstration analysis/training; not needed by the game EXE.
+-r requirements-ai.txt
+scikit-learn==1.9.1

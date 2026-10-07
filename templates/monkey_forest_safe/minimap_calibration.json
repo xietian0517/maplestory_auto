@@ -1,0 +1,9 @@
+{
+  "request_id": "5ac70696f3954ad389bb41a83a6d2ed3",
+  "scale": 0.0625,
+  "intercept": [
+    25.85,
+    19.1
+  ],
+  "source": "Reviewed static map and 55595 paired samples in run_20260927_190310_257800; live position uses only the yellow marker."
+}

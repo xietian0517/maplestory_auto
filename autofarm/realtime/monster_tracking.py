@@ -4,6 +4,58 @@ import numpy as np
 from .model import Actor,Box
 
 
+def associate(hits,previous,dt,camera_delta,next_track):
+    """Associate visible sprites and measure motion relative to the terrain."""
+    dx,dy=camera_delta
+    previous=[Actor(p.box.moved(dx,dy),p.confidence,p.vx,p.vy,p.track_id)
+              for p in previous] if 0<dt<.25 else []
+    actors=[];used=set()
+    for hit in hits:
+        candidates=[p for p in previous if p.track_id not in used
+                    and abs(p.box.cx-hit.box.cx)<70 and abs(p.box.cy-hit.box.cy)<60]
+        old=min(candidates,key=lambda p:abs(p.box.cx-hit.box.cx)+abs(p.box.cy-hit.box.cy)) if candidates else None
+        if old:
+            vx=max(-450,min(450,(hit.box.cx-old.box.cx)/dt))
+            vy=max(-600,min(600,(hit.box.cy-old.box.cy)/dt))
+            ident=old.track_id;used.add(ident)
+        else:
+            vx=vy=0;ident=next_track;next_track+=1
+        actors.append(Actor(hit.box,hit.confidence,vx,vy,ident))
+    return actors,next_track
+
+
+class RecentTracks:
+    """Reconnect only current detections across brief, unambiguous gaps.
+
+    Cached boxes never become observations or attack targets. World-space
+    matching removes camera translation; ambiguity retains a fresh identity.
+    """
+    def __init__(self):self.seen={}
+
+    def clear(self):self.seen.clear()
+
+    def update(self,actors,offset,now,new_id_start):
+        dx,dy=offset
+        self.seen={i:v for i,v in self.seen.items() if 0<now-v[0]<=.22}
+        occupied={a.track_id for a in actors};options={}
+        for index,a in enumerate(actors):
+            if a.track_id<new_id_start:continue
+            x,y=a.box.cx-dx,a.box.y2-dy
+            options[index]=[i for i,(t,b) in self.seen.items() if i not in occupied
+                            and abs(x-b.cx)<35 and abs(y-b.y2)<25]
+        proposed={index:ids[0] for index,ids in options.items() if len(ids)==1}
+        result=[]
+        for index,a in enumerate(actors):
+            old_id=proposed.get(index)
+            if old_id is not None and sum(old_id in ids for ids in options.values())==1:
+                t,b=self.seen[old_id];dt=now-t
+                a=Actor(a.box,a.confidence,max(-450,min(450,(a.box.cx-dx-b.cx)/dt)),
+                        max(-600,min(600,(a.box.y2-dy-b.y2)/dt)),old_id)
+            result.append(a)
+        for a in result:self.seen[a.track_id]=(now,a.box.moved(-dx,-dy))
+        return result
+
+
 def color_hist(image):
     hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
     h=cv2.calcHist([hsv],[0,1],None,[24,12],[0,180,0,256])

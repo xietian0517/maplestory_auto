@@ -1,5 +1,6 @@
 """Short observed recovery actions independent of route-planner waiting states."""
 from .model import Decision
+from .control import standing_platform
 
 
 class ActiveRecovery:
@@ -29,6 +30,39 @@ class ActiveRecovery:
             self.last_engagement=now
             self.idle_since=None; self.until=0; self.progress_at=now
             return d
+        floor=standing_platform(o) if o.player and not o.reason else None
+        if floor is None:
+            # An unknown foothold is a perception problem, not evidence that a
+            # random jump or remembered horizontal input is safe.
+            self.until=0; self.idle_since=None
+            return d
+        base=getattr(controller,'base',controller) if controller is not None else None
+        if base is not None and getattr(base,'safe_platforms',None) is not None:
+            # The reviewed ledge policy owns its waits and transfers. Generic
+            # idle recovery must never walk off a firing perch or chase a mob.
+            self.until=0;self.idle_since=None
+            return d
+        if base is not None and getattr(base,'sustain_farming',False) and d.reason=='firing_position_wait':
+            self.until=0;self.idle_since=None
+            return d
+        if (base is not None and d.reason=='engagement_reacquire_wait'
+                and base.wait_engagement(o,now)):
+            self.until=0;self.idle_since=None
+            return d
+        if base is not None and (
+                d.reason=='jump_brake' and getattr(base,'jump_brake_edge',None) is not None
+                or d.reason=='drop_brake' and getattr(base,'drop_brake_edge',None) is not None
+                or d.reason=='anchor_wait_respawn' and getattr(base,'farm_anchor',None)==floor.id
+                and base.no_enemy_since is not None and now-base.no_enemy_since<base.anchor_quiet_seconds):
+            # These controllers own bounded waits. Generic 0.8s idle recovery
+            # must not insert a walk before a settled jump or during respawn.
+            self.until=0;self.idle_since=None
+            return d
+        if base is not None and getattr(base,'rope_climber',None) is not None:
+            # The rope state machine owns its stop/settle/retry budget. Generic
+            # recovery must not restart it or insert lateral movement mid-catch.
+            self.until=0; self.idle_since=None
+            return d
         if controller is not None and now-max(self.last_engagement,self.last_replan)>6:
             base=getattr(controller,'base',controller)
             if base.request_exploration(o,now):
@@ -45,10 +79,16 @@ class ActiveRecovery:
         if self.idle_since is None: self.idle_since=now
         if not stuck and now-self.idle_since<.8: return d
         if self.last_x is None: return d
-        direction='right' if self.last_x<width/2 else 'left'
-        if self.attempt%3==1: direction='left' if direction=='right' else 'right'
+        x=o.player.box.cx
+        speed=getattr(getattr(base,'motion',None),'speed',220)
+        required=max(30,speed*.18+20)
+        room={'left':x-floor.left,'right':floor.right-x}
+        choices=[side for side in ('left','right') if room[side]>required]
+        if not choices:
+            self.until=0; self.idle_since=None
+            return Decision(reason='navigation_no_safe_recovery')
+        direction=max(choices,key=lambda side:room[side])
         keys={direction}
-        if self.attempt%3==2: keys.add('alt')
         self.attempt+=1; self.until=now+.18; self.idle_since=None; self.progress_at=now
         self.action=Decision(frozenset(keys),'active_recovery_step')
         return self.action

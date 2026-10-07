@@ -28,13 +28,16 @@ class CapturedRegressionTests(unittest.TestCase):
         data=json.loads((FIXTURES/'scene.json').read_text(encoding='utf-8'))
         self.scene=Scene.parse(data,data['request_id'],1366,768)
         self.vision=GroundedVision(self.scene,self.seed)
+        self.vision.minimap.configure(self.seed,dict(scale=.0625,intercept=[11.90625,35.625]))
+        for i in range(3):self.vision.minimap.observe(self.seed,.8+i*.04)
 
     def test_pet_label_occlusion_still_finds_visible_name(self):
         self.vision.observe(Frame(1,1,1,self.seed,True,()))
         lost=cv2.imread(str(FIXTURES/'pet_occlusion.png'))
         o=self.vision.observe(Frame(2,1.04,1.04,lost,True,()))
         self.assertIsNotNone(o.player)
-        self.assertAlmostEqual(o.player.box.cx,683.5,delta=2)
+        self.assertEqual(self.vision.identity_source,'minimap_yellow')
+        self.assertAlmostEqual(o.player.box.cx,683.5,delta=16)
         self.assertAlmostEqual(o.player.box.y2,430,delta=2)
 
     def test_camera_anchor_corrects_accumulated_error(self):
@@ -45,18 +48,46 @@ class CapturedRegressionTests(unittest.TestCase):
         self.assertAlmostEqual(anchor[0],-71,delta=3)
         self.assertAlmostEqual(anchor[1],16,delta=3)
 
-    def test_full_occlusion_does_not_reuse_old_position(self):
+    def test_reused_scene_without_visible_marker_waits_despite_valid_camera(self):
+        data=json.loads((FIXTURES/'reused_scene.json').read_text(encoding='utf-8'))
+        scene=Scene.parse(data,data['request_id'],1366,768)
+        v=GroundedVision(scene,cv2.imread(str(FIXTURES/'reused_seed.png')))
+        v.minimap.configure(v.seed,dict(scale=.0625,intercept=[26.21875,46.0]))
+        image=cv2.imread(str(FIXTURES/'reused_scroll.png'))
+        for i in range(3):o=v.observe(Frame(i,1+i*.04,1+i*.04,image,True,()))
+        self.assertTrue(o.reason.startswith('minimap_'))
+        self.assertIsNone(o.player)
+        self.assertAlmostEqual(v.offset[1],258,delta=3)
+
+    def test_camera_relocalizes_original_scene_after_lost_frame(self):
+        camera=self.vision.camera
+        self.assertTrue(camera.update(self.seed)[0])
+        with patch.object(camera,'anchor',return_value=None),patch.object(camera,'terrain_shift',return_value=None):
+            self.assertFalse(camera.update(np.zeros_like(self.seed))[0])
+        self.assertFalse(camera.aligned)
+        self.assertTrue(camera.update(self.seed)[0])
+        self.assertTrue(camera.aligned)
+
+    def test_unrelated_stable_picture_cannot_become_a_valid_camera(self):
+        image=np.zeros_like(self.seed)
+        for _ in range(30): self.assertFalse(self.vision.camera.update(image)[0])
+
+    def test_offscreen_seed_hint_does_not_crash_fragment_search(self):
+        self.assertIsNone(self.vision._player(np.zeros_like(self.seed),3000,3000))
+
+    def test_full_sprite_occlusion_keeps_current_minimap_position(self):
         self.vision.observe(Frame(1,1,1,self.seed,True,()))
         image=self.seed.copy(); image[350:470,620:715]=0
         o=self.vision.observe(Frame(2,1.04,1.04,image,True,()))
-        self.assertIsNone(o.player)
+        self.assertIsNotNone(o.player)
+        self.assertEqual(self.vision.identity_source,'minimap_yellow')
 
     def test_hidden_name_keeps_body_identity(self):
         image=self.seed.copy(); b=self.scene.name_box
         image[round(b.y1):round(b.y2),round(b.x1):round(b.x2)]=0
         o=self.vision.observe(Frame(1,1,1,image,True,()))
         self.assertIsNotNone(o.player)
-        self.assertEqual(self.vision.identity_source,'appearance')
+        self.assertEqual(self.vision.identity_source,'minimap_yellow')
         self.assertAlmostEqual(o.player.box.cx,b.cx,delta=2)
 
     def test_global_appearance_reacquires_outside_previous_search(self):
@@ -143,8 +174,43 @@ class CapturedRegressionTests(unittest.TestCase):
                     recording.offer(Frame(i,1+i*.1,1+i*.1,self.seed,True,()),dict(frame_id=i,scene_id=scene.request_id))
             self.assertIsNone(recording.error)
             report=replay(p)
-            self.assertEqual(report['frames'],2); self.assertEqual(report['visible_frames'],2)
+            self.assertEqual(report['frames'],2); self.assertEqual(report['visible_frames'],0)
+            self.assertTrue(all(row['reason']=='minimap_uncalibrated' for row in report['rows']))
             self.assertEqual(report['mode'],'OFFLINE_REPLAY')
+
+    def test_runtime_keeps_original_scene_and_recovers_after_alignment_loss(self):
+        from autofarm.realtime.runtime import run
+        from autofarm.realtime.semantic import load_scene
+        with tempfile.TemporaryDirectory() as folder:
+            p=Path(folder); req=make_request(self.seed,p)
+            data=self.scene.to_data(); data['request_id']=req['request_id']; atomic_json(p/'scene.json',data)
+            original=(p/'request.json').read_bytes(); seed=self.seed; clock=[100.]
+            class FakeCapture:
+                backend='fixture';error=None
+                def __init__(self,*args): self.i=0
+                def __enter__(self): return self
+                def __exit__(self,*args): pass
+                def next(self,*args):
+                    self.i+=1;clock[0]+=.12
+                    if self.i>32: (p/'STOP').write_text('done');return None
+                    return Frame(self.i,clock[0],clock[0],seed,True,(0,0,1366,768))
+            class FakeApi:
+                def get_foreground(self): return 7
+            def observe(vision,packet,epoch):
+                if packet.id<=25:
+                    return Observation(packet.id,packet.started,reason='camera_or_map_changed',motion_valid=False)
+                o=nav_observation(packet.started,x=200,y=400);o.map_epoch=epoch
+                return o
+            with patch('autofarm.realtime.runtime.LatestCapture',FakeCapture), \
+                    patch.object(GroundedVision,'observe',observe),patch('time.perf_counter',side_effect=lambda:clock[0]):
+                report=run(FakeApi(),7,p,seconds=60)
+            self.assertEqual(original,(p/'request.json').read_bytes())
+            self.assertEqual(load_scene(p)[0].request_id,req['request_id'])
+            self.assertTrue((p/'refresh/request.json').exists())
+            self.assertEqual(report['reasons']['camera_or_map_changed'],25)
+            self.assertGreater(report['reasons'].get('search',0),0)
+            self.assertNotIn('waiting_for_gpt',report['reasons'])
+            self.assertEqual(json.loads((p/'status.json').read_text())['scene_id'],req['request_id'])
 
     def test_runtime_final_status_and_async_recording(self):
         from autofarm.realtime.runtime import run
@@ -170,6 +236,38 @@ class CapturedRegressionTests(unittest.TestCase):
             self.assertEqual(status['phase'],'file_stop')
             self.assertTrue(report['keys_released']); self.assertEqual(report['active_input_frames'],0)
             self.assertGreater(report['recording_frames'],0); self.assertIsNone(report['recording_error'])
+
+    def test_hybrid_runtime_never_issues_a_jump_attack(self):
+        from autofarm.realtime.runtime import run
+        with tempfile.TemporaryDirectory() as folder:
+            p=Path(folder); req=make_request(self.seed,p)
+            data=self.scene.to_data(); data['request_id']=req['request_id']; atomic_json(p/'scene.json',data)
+            seed=self.seed
+            class FakeCapture:
+                backend='fixture'; error=None
+                def __init__(self,*args): self.i=0
+                def __enter__(self): return self
+                def __exit__(self,*args): pass
+                def next(self,*args):
+                    self.i+=1
+                    if self.i>40: (p/'STOP').write_text('done'); return None
+                    t=time.perf_counter(); return Frame(self.i,t,t,seed,True,(0,0,1366,768))
+            class FakeApi:
+                def get_foreground(self): return 7
+            def observe(vision,packet,epoch):
+                o=nav_observation(packet.started,x=200,y=400,
+                    monsters=[Actor(Box(230,355,270,400),.99,track_id=9)])
+                o.map_epoch=epoch
+                return o
+            with patch('autofarm.realtime.runtime.LatestCapture',FakeCapture), \
+                    patch.object(GroundedVision,'observe',observe):
+                run(FakeApi(),7,p,seconds=1,hybrid_attacks=True)
+            config=json.loads((p/'run_configuration.json').read_text())
+            report=json.loads((p/'report.json').read_text())
+            # hybrid 只在地面处理近身目标；证据里必须能直接看出跳A 是关闭的。
+            self.assertEqual(config['combat_policy'],'hybrid')
+            self.assertFalse(config['jump_attacks_enabled'])
+            self.assertFalse([r for r in report['reasons'] if r.startswith('jump_attack')])
 
     def test_runtime_capture_failure_is_not_reported_complete(self):
         from autofarm.realtime.runtime import run
@@ -228,20 +326,33 @@ class NavigationRegressionTests(unittest.TestCase):
         self.assertEqual(d.keys,{'right'})
         self.assertEqual(c.target_id,3)
 
-    def test_random_jump_early_timing_releases_alt_then_waits_30ms_without_visual_rise(self):
+    def test_accepted_jump_without_observed_ascent_cannot_fire(self):
         from autofarm.realtime.combat import JumpAttack
         target=Actor(Box(310,355,350,400),.99)
         c=JumpAttack(Platform('ground',0,640,400),target,1,'right',400)
         def step(t): return c.decide(nav_observation(t,y=400,monsters=[target]),t)
         c.on_input_applied(step(1),1)
         self.assertEqual(step(1.02).keys,{'alt'})
-        release=step(1.041)
+        release=step(1.071)
         self.assertFalse(release.keys)
         self.assertNotIn('shift',step(1.075).keys)  # Release request not yet accepted.
-        c.on_input_applied(release,1.041)
-        self.assertNotIn('shift',step(1.06).keys)
-        self.assertEqual(step(1.072).reason,'jump_attack_fire_first')
+        c.on_input_applied(release,1.071)
+        self.assertNotIn('shift',step(1.09).keys)
+        self.assertNotIn('shift',step(1.102).keys)
+        self.assertNotIn('shift',step(1.23).keys)  # Recovery also needs ascent.
         self.assertNotIn('shift',step(1.4).keys)  # Never wait until a late falling shot.
+
+    def test_close_jump_needs_measured_clearance_not_one_pixel_jitter(self):
+        from autofarm.realtime.combat import JumpAttack
+        target=Actor(Box(180,355,220,400),.99)
+        c=JumpAttack(Platform('ground',0,640,400),target,1,'right',400)
+        c.on_input_applied(c.decide(nav_observation(1,y=400,monsters=[target]),1),1)
+        c.jump_released_at=1.071
+        for y in (400,399,394,386):
+            d=c.decide(nav_observation(1.12,y=y,vy=-100,monsters=[target]),1.12)
+            self.assertNotIn('shift',d.keys)
+        d=c.decide(nav_observation(1.13,y=380,vy=-100,monsters=[target]),1.13)
+        self.assertEqual(d.reason,'jump_attack_fire_first')
 
     def test_late_frame_can_recover_an_aligned_shot_but_not_shoot_over_target(self):
         from autofarm.realtime.combat import JumpAttack
@@ -295,9 +406,9 @@ class NavigationRegressionTests(unittest.TestCase):
             self.assertNotIn('shift',d.keys)
             c.on_input_applied(d,1.04)
             if early:
-                release=c.decide(nav_observation(1.05,y=388,vy=-200,monsters=[target]),1.05)
-                c.on_input_applied(release,1.05)
-            d=c.decide(nav_observation(1.1,y=370,vy=-200,monsters=[target]),1.1)
+                release=c.decide(nav_observation(1.08,y=388,vy=-200,monsters=[target]),1.08)
+                c.on_input_applied(release,1.08)
+            d=c.decide(nav_observation(1.12,y=370,vy=-200,monsters=[target]),1.12)
             self.assertIn('shift',d.keys)
             self.assertNotIn('shift',c.decide(nav_observation(1.16,y=350,vy=-100),1.16).keys)
 
@@ -309,29 +420,41 @@ class NavigationRegressionTests(unittest.TestCase):
             return c.decide(nav_observation(t,y=y,vy=vy,monsters=[target]),t)
         c.on_input_applied(step(1,400),1)
         self.assertNotIn('shift',step(1.04,388,-200).keys)
-        c.on_input_applied(step(1.05,388,-200),1.05)
-        first=step(1.1,375,-200)
+        c.on_input_applied(step(1.08,388,-200),1.08)
+        first=step(1.12,375,-200)
         self.assertEqual(first.reason,'jump_attack_fire_first')
         self.assertEqual(c.shots_issued,0)  # Rejected input cannot count as a shot.
-        c.on_input_applied(first,1.1);c.on_input_applied(first,1.11)
+        c.on_input_applied(first,1.12);c.on_input_applied(first,1.13)
         self.assertEqual(c.shots_issued,1)
-        self.assertNotIn('shift',step(1.35,320).keys)
+        self.assertNotIn('shift',step(1.38,320).keys)
         self.assertEqual(step(1.8,400).reason,'jump_attack_followup_jump')
         self.assertFalse(c.done)
         c.on_input_applied(step(1.9,400),1.9)
-        c.on_input_applied(step(1.95,388,-200),1.95)
-        second=step(2,375,-200)
+        c.on_input_applied(step(1.98,388,-200),1.98)
+        second=step(2.02,375,-200)
         self.assertEqual(second.reason,'jump_attack_fire_second')
-        c.on_input_applied(second,2)
+        c.on_input_applied(second,2.02)
         self.assertEqual(c.shots_issued,2)
         self.assertEqual(step(2.6,400).reason,'jump_attack_landed')
         self.assertTrue(c.done)
 
-    def test_ranged_same_level_enemy_uses_default_live_jump_policy(self):
-        c=Controller(MotionProfile(180,90,150,True),True);c.prefer_jump_attacks=True
+    def test_explicit_jump_policy_still_lifts_off_for_a_same_level_enemy(self):
+        c=Controller(MotionProfile(180,90,150,True),True)
+        c.prefer_jump_attacks=True;c.jump_attacks_enabled=True
         d=c.decide(nav_observation(1,y=400,monsters=[Actor(Box(350,355,390,400),.99)]),1)
         self.assertIsNotNone(c.jump_combat)
         self.assertNotIn('shift',d.keys)
+
+    def test_hybrid_policy_never_lifts_off_for_close_or_higher_targets(self):
+        # 跳A 已按实测证据关闭：无论目标近身、同层还是更高，hybrid 只留在地面，
+        # 由站立射击路径处理（让位/转身/攻击）。
+        for x,y in ((350,400),(225,400),(310,340)):
+            c=Controller(MotionProfile(180,100,150,True),True)
+            c.direct_attacks=False;c.prefer_jump_attacks=False
+            target=Actor(Box(x-20,y-45,x+20,y),.99,track_id=9)
+            d=c.decide(nav_observation(1,y=400,monsters=[target]),1)
+            self.assertIsNone(c.jump_combat)
+            self.assertNotIn('alt',d.keys)
 
     def test_rope_too_high_is_rejected_and_distant_rope_is_approached(self):
         o=nav_observation(1,x=200,y=400)
@@ -342,7 +465,11 @@ class NavigationRegressionTests(unittest.TestCase):
         c=RopeClimber('combat',jump_height=90,speed=180,jump_distance=100)
         self.assertEqual(c.decide(o,1).keys,{'right'})
         o.player=Actor(Box(365,352,395,400),.99)
-        self.assertEqual(c.decide(o,1).reason,'rope_approach')  # 40px too far for this high rope end.
+        self.assertEqual(c.decide(o,1).reason,'rope_approach')
+        o.player=Actor(Box(395,352,425,400),.99)
+        self.assertEqual(c.decide(o,1).reason,'rope_fine_nudge')
+        # A delayed velocity estimate must not prolong this close correction.
+        self.assertFalse(c.decide(nav_observation(1.033,x=410,y=400),1.033).keys)
 
     def test_haste_refresh_uses_120_seconds_and_successful_submission(self):
         from autofarm.realtime.combat import HasteRefresh
@@ -374,11 +501,27 @@ class NavigationRegressionTests(unittest.TestCase):
         self.assertIn('shift',c.decide(nav_observation(1.15,y=370,vy=-200,monsters=[target]),1.15).keys)
 
     def test_enemy_interrupts_rope_approach_before_takeoff(self):
-        c=Controller(MotionProfile(180,90,150,True),True);c.last_epoch=1;c.prefer_jump_attacks=True
+        c=Controller(MotionProfile(180,90,150,True),True);c.last_epoch=1
+        c.prefer_jump_attacks=True;c.jump_attacks_enabled=True
         c.rope_climber=RopeClimber('combat');c.rope_climber.phase='approach'
         c.decide(nav_observation(1,y=400,monsters=[Actor(Box(310,355,350,400),.99)]),1)
         self.assertIsNone(c.rope_climber)
         self.assertIsNotNone(c.jump_combat)
+
+    def test_standing_and_hybrid_attack_visible_enemy_before_catching_rope(self):
+        for direct in (True,False):
+            c=Controller(MotionProfile(180,90,150,True),True);c.last_epoch=1;c.direct_attacks=direct
+            c.rope_climber=RopeClimber('combat');c.rope_climber.phase='brake'
+            c.decide(nav_observation(1,y=400,monsters=[Actor(Box(310,355,350,400),.99)]),1)
+            self.assertIsNone(c.rope_climber)
+
+    def test_same_level_enemy_cannot_interrupt_an_acknowledged_rope_catch(self):
+        for direct in (True,False):
+            c=Controller(MotionProfile(180,90,150,True),True);c.last_epoch=1;c.direct_attacks=direct
+            rope=RopeClimber('combat');rope.decide(nav_observation(1,x=420,y=400),1)
+            self.assertEqual(rope.phase,'catch');c.rope_climber=rope
+            c.decide(nav_observation(1.05,x=420,y=400,monsters=[Actor(Box(500,355,540,400),.99)]),1.05)
+            self.assertIs(c.rope_climber,rope)
 
     def test_jump_attack_does_not_interrupt_rope_catching(self):
         c=Controller(MotionProfile(180,90,150,True),True); c.last_epoch=1
@@ -423,8 +566,9 @@ class NavigationRegressionTests(unittest.TestCase):
         o=nav_observation(2,y=400)
         o.platforms.append(Platform('lower',0,640,580))
         o.navigation_targets=[Actor(Box(300,530,350,580),.95)]
-        c.decide(o,2)
-        self.assertEqual(c.pending_edge,('ground','lower','drop'))
+        d=c.decide(o,2)
+        self.assertEqual(c.transition,('ground','lower','drop'))
+        self.assertEqual(d.keys,{'down'})
 
     def test_dynamic_support_extends_clipped_floor_without_crossing_gap(self):
         from autofarm.realtime.terrain import LocalTerrain
@@ -442,13 +586,29 @@ class NavigationRegressionTests(unittest.TestCase):
     def test_wait_recovery_moves_briefly_and_yields_to_combat(self):
         from autofarm.realtime.recovery import ActiveRecovery
         from autofarm.realtime.model import Decision
-        r=ActiveRecovery(); d=Decision(reason='airborne_or_floor_unknown')
-        r.apply(nav_observation(1,x=200,y=550),d,1,800)
-        action=r.apply(nav_observation(1.9,x=200,y=550),d,1.9,800)
+        r=ActiveRecovery(); d=Decision(reason='search')
+        r.apply(nav_observation(1,x=200,y=400),d,1,800)
+        action=r.apply(nav_observation(1.9,x=200,y=400),d,1.9,800)
         self.assertEqual(action.keys,{'right'})
         attack=Decision(frozenset({'shift'}),'attack')
         self.assertEqual(r.apply(nav_observation(1.95),attack,1.95,800),attack)
         r.reset(); self.assertFalse(r.apply(nav_observation(2),d,3,800).keys)
+
+    def test_unknown_floor_never_triggers_blind_recovery(self):
+        from autofarm.realtime.recovery import ActiveRecovery
+        from autofarm.realtime.model import Decision
+        r=ActiveRecovery(); d=Decision(reason='airborne_or_floor_unknown')
+        for t in np.arange(1,20,.1):
+            self.assertFalse(r.apply(nav_observation(t,x=200,y=550),d,t,800).keys)
+
+    def test_recovery_never_adds_jump_even_after_repeated_stalls(self):
+        from autofarm.realtime.recovery import ActiveRecovery
+        from autofarm.realtime.model import Decision
+        r=ActiveRecovery(); count=0
+        for t in np.arange(1,20,.1):
+            d=r.apply(nav_observation(t,x=200,y=400),Decision(reason='search'),t,800)
+            self.assertNotIn('alt',d.keys); count+=bool(d.keys)
+        self.assertGreater(count,10)
 
     def test_session_pose_bank_survives_scene_refresh(self):
         from types import SimpleNamespace
@@ -477,10 +637,46 @@ class NavigationRegressionTests(unittest.TestCase):
         c=Controller(MotionProfile(180,90,150,True),True)
         self.assertFalse(c.decide(nav_observation(1,x=420,y=310),1).keys)
         d=c.decide(nav_observation(1.2,x=420,y=310),1.2)
-        self.assertEqual(d.reason,'rope_resume'); self.assertEqual(d.keys,{'up'})
+        self.assertEqual(d.reason,'rope_probe_attachment'); self.assertEqual(d.keys,{'up'})
+        self.assertFalse(c.rope_climber.grab_confirmed)
         falling=Controller(MotionProfile(180,90,150,True),True)
         falling.decide(nav_observation(1,x=420,y=310,vy=200),1)
         self.assertFalse(falling.decide(nav_observation(1.2,x=420,y=340,vy=200),1.2).keys)
+
+    def test_stationary_rope_probe_fails_and_cannot_loop_at_same_position(self):
+        c=Controller(MotionProfile(180,90,150,True),True)
+        for t in (1,1.2): c.decide(nav_observation(t,x=420,y=310),t)
+        d=c.decide(nav_observation(1.9,x=420,y=310),1.9)
+        self.assertEqual(d.reason,'rope_resume_unconfirmed'); self.assertFalse(d.keys)
+        for t in (2,2.3,3,5,10):
+            self.assertNotIn('up',c.decide(nav_observation(t,x=420,y=310),t).keys)
+
+    def test_rope_probe_requires_camera_independent_ascent(self):
+        c=Controller(MotionProfile(180,90,150,True),True)
+        for t in (1,1.2): c.decide(nav_observation(t,x=420,y=310),t)
+        o=nav_observation(1.4,x=420,y=290)
+        o.platforms=[Platform(p.id,p.left,p.right,p.y-20) for p in o.platforms]
+        o.ropes=[Rope(420,190,330)]
+        self.assertEqual(c.decide(o,1.4).reason,'rope_probe_attachment')
+        o=nav_observation(1.5,x=420,y=295,vy=-100)
+        self.assertEqual(c.decide(o,1.5).reason,'rope_ascend')
+        self.assertTrue(c.rope_climber.grab_confirmed)
+
+    def test_rope_below_player_does_not_cause_upward_input(self):
+        c=RopeClimber('combat'); c.last_epoch=1; c.phase='probe'
+        c.target_id='combat'; c.rope_index=0; c.phase_at=1; c.attempts=1
+        d=c.decide(nav_observation(1.1,x=420,y=207),1.1)
+        # At the top, confirm landing; never initiate upward acquisition.
+        self.assertFalse(d.keys)
+        c=Controller(MotionProfile(180,90,150,True),True)
+        for t in (1,1.2,2): self.assertNotIn('up',c.decide(nav_observation(t,x=420,y=190),t).keys)
+
+    def test_rope_ascent_stall_stops_input(self):
+        c=RopeClimber('combat');c.phase='ascend';c.target_id='combat';c.rope_index=0
+        c.grab_confirmed=True;c.phase_at=1;c.started=1;c.attempts=1
+        self.assertEqual(c.decide(nav_observation(1,x=420,y=300),1).keys,{'up'})
+        d=c.decide(nav_observation(1.9,x=420,y=300),1.9)
+        self.assertEqual(d.reason,'rope_no_vertical_progress');self.assertFalse(d.keys)
 
     def test_identity_interrupt_does_not_restart_navigation_search_delay(self):
         c=Controller(MotionProfile(180,90,150,True),True); c.last_epoch=1
@@ -602,12 +798,56 @@ class NavigationRegressionTests(unittest.TestCase):
         self.assertFalse(d.keys)
         self.assertEqual(c.decide(nav_observation(1.2,x=420,y=400),1.2).keys,{'up','alt'})
 
-    def test_diagonal_rope_catch_holds_up_and_releases_lateral_at_rope(self):
+    def test_rope_alignment_replaces_inertial_diagonal_jump(self):
         c=RopeClimber(target_id='combat',speed=180)
-        self.assertEqual(c.decide(nav_observation(1,x=396,y=400),1).keys,{'right','up','alt'})
-        self.assertEqual(c.decide(nav_observation(1.15,x=400,y=360,vy=-200),1.15).keys,{'right','up'})
-        self.assertEqual(c.decide(nav_observation(1.24,x=419,y=340,vy=-200),1.24).keys,{'up'})
-        self.assertEqual(c.decide(nav_observation(1.50,x=420,y=310,vy=-100),1.50).keys,{'up'})
+        self.assertEqual(c.decide(nav_observation(1,x=396,y=400),1).keys,{'right'})
+        moving=nav_observation(1.1,x=405,y=400); moving.player=Actor(moving.player.box,.99,vx=170)
+        self.assertEqual(c.decide(moving,1.1).reason,'rope_brake')
+        self.assertFalse(c.decide(nav_observation(1.2,x=420,y=400),1.2).keys)
+        self.assertEqual(c.decide(nav_observation(1.34,x=420,y=400),1.34).keys,{'up','alt'})
+        self.assertEqual(c.decide(nav_observation(1.5,x=420,y=340,vy=-200),1.5).keys,{'up'})
+
+    def test_each_missed_rope_attempt_counts_and_waits_for_landing(self):
+        c=RopeClimber(target_id='combat')
+        for attempt in range(3):
+            t=1+attempt*1.4
+            x=(420,424,416)[attempt]
+            if attempt:
+                adjustment=c.decide(nav_observation(t-.1,x=420,y=400),t-.1)
+                self.assertEqual(adjustment.keys,{'right' if attempt==1 else 'left'})
+            if attempt:
+                self.assertFalse(c.decide(nav_observation(t,x=x,y=400),t).keys)
+                self.assertEqual(c.decide(nav_observation(t+.13,x=x,y=400),t+.13).keys,{'up','alt'})
+            else:
+                self.assertEqual(c.decide(nav_observation(t,x=x,y=400),t).keys,{'up','alt'})
+            d=c.decide(nav_observation(t+.5,x=470,y=350,vy=150),t+.5)
+            if attempt<2:
+                self.assertEqual(d.reason,'rope_missed_reposition')
+                self.assertFalse(c.decide(nav_observation(t+.6,x=480,y=370,vy=150),t+.6).keys)
+                self.assertEqual(c.phase,'recover')
+                c.decide(nav_observation(t+.7,x=420,y=400),t+.7)
+            else:
+                self.assertEqual(d.reason,'rope_catch_failed')
+                self.assertEqual(c.phase,'failed')
+
+    def test_rope_top_pass_through_is_not_immediate_completion(self):
+        c=RopeClimber(target_id='combat');c.decide(nav_observation(1,x=420,y=400),1)
+        c.phase='confirm';c.phase_at=1.1
+        d=c.decide(nav_observation(1.3,x=420,y=210,vy=90),1.3)
+        self.assertNotEqual(d.reason,'climb_complete');self.assertFalse(c.done)
+
+    def test_recovery_does_not_interrupt_rope_with_old_lateral_pulse(self):
+        from autofarm.realtime.recovery import ActiveRecovery
+        from autofarm.realtime.model import Decision
+        c=Controller();c.rope_climber=RopeClimber('combat');c.rope_climber.phase='catch'
+        recovery=ActiveRecovery();recovery.epoch=1;recovery.until=20
+        recovery.action=Decision(frozenset({'left'}),'active_recovery_step')
+        recovery.last_engagement=0;recovery.last_replan=0
+        o=nav_observation(10,x=420,y=400)
+        d=Decision(frozenset({'up'}),'rope_catch')
+        with patch.object(c,'request_exploration') as explore:
+            self.assertEqual(recovery.apply(o,d,10,1366,controller=c),d)
+            explore.assert_not_called()
 
     def test_no_downward_rope_edge_for_upward_only_climber(self):
         ps=[Platform('a',0,640,100),Platform('b',0,640,400)]

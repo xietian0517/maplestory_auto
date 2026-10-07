@@ -92,7 +92,7 @@ class NavigationController:
         if self.last_epoch!=o.map_epoch:
             self.reset(); self.failed_floors.clear(); self.last_epoch=o.map_epoch
         floor=standing_platform(o)
-        if self.base.jump_combat:
+        if self.base.jump_combat or (self.base.direct_attacks and now<self.base.direct_rest_until):
             self.last_action=self.base.decide(o,now)
             return self.last_action
         if (o.player and abs(o.player.vy)<60 and any(m.confidence>=.78

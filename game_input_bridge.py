@@ -13,7 +13,8 @@ from autofarm.bridge_service import BridgeService, STATE_FILE, make_action, requ
 from autofarm.winapi import WinApi
 
 VERSION = '0.1.0'
-GAME = Path(r'F:\mxd\冒险岛online\mxdclassic\Maplestory_Classic.exe')
+GAME = Path(os.environ.get('MAPLE_GAME_PATH',
+            r'D:\Program Files\上海数龙科技有限公司\冒险岛online\mxdclassic\Maplestory_Classic.exe'))
 GAME_TITLE = '冒险岛怀旧服'
 
 

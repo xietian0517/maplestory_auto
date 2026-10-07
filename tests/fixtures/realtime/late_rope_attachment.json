@@ -1,0 +1,616 @@
+{
+  "source_run": "run_20260925_202827_764700",
+  "jump_height": 112.96,
+  "rope": {
+    "x": -223,
+    "top": 827,
+    "bottom": 1012
+  },
+  "platforms": [
+    {
+      "id": "source",
+      "left": -380,
+      "right": 1366,
+      "y": 1068
+    },
+    {
+      "id": "target",
+      "left": -308,
+      "right": 284,
+      "y": 826
+    }
+  ],
+  "rows": [
+    {
+      "t": 25.447658100005356,
+      "frame_id": 741,
+      "player": [
+        154.0,
+        632
+      ],
+      "player_velocity": [
+        0.0,
+        0.0
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.462521900000866,
+      "frame_id": 742,
+      "player": [
+        154.0,
+        632
+      ],
+      "player_velocity": [
+        0.0,
+        0.0
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.497631199999887,
+      "frame_id": 743,
+      "player": [
+        154.0,
+        632
+      ],
+      "player_velocity": [
+        0.0,
+        0.0
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.5413239000045,
+      "frame_id": 744,
+      "player": [
+        155.5,
+        632.5
+      ],
+      "player_velocity": [
+        46.858013969555415,
+        15.619337989851804
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.568271100004495,
+      "frame_id": 745,
+      "player": [
+        155.5,
+        620.5
+      ],
+      "player_velocity": [
+        0.0,
+        -398.83407509052716
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.583246200003487,
+      "frame_id": 746,
+      "player": [
+        156.0,
+        599
+      ],
+      "player_velocity": [
+        16.034326285760056,
+        -689.4760302876823
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.61777350000193,
+      "frame_id": 747,
+      "player": [
+        156.0,
+        590
+      ],
+      "player_velocity": [
+        0.0,
+        -288.7113848241525
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.649677400004293,
+      "frame_id": 748,
+      "player": [
+        156.0,
+        573
+      ],
+      "player_velocity": [
+        0.0,
+        -533.5643353485019
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.693873900003382,
+      "frame_id": 749,
+      "player": [
+        156.0,
+        561
+      ],
+      "player_velocity": [
+        0.0,
+        -387.33292236748713
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.72616740000376,
+      "frame_id": 750,
+      "player": [
+        156.0,
+        543
+      ],
+      "player_velocity": [
+        0.0,
+        -390.99495179715063
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 25.75978700000269,
+      "frame_id": 751,
+      "player": null,
+      "player_velocity": null,
+      "camera_offset": null,
+      "reason": "player_not_found"
+    },
+    {
+      "t": 25.787283800003934,
+      "frame_id": 752,
+      "player": null,
+      "player_velocity": null,
+      "camera_offset": null,
+      "reason": "player_not_found"
+    },
+    {
+      "t": 25.83055990000139,
+      "frame_id": 753,
+      "player": null,
+      "player_velocity": null,
+      "camera_offset": null,
+      "reason": "player_not_found"
+    },
+    {
+      "t": 25.87593629999901,
+      "frame_id": 754,
+      "player": null,
+      "player_velocity": null,
+      "camera_offset": null,
+      "reason": "player_not_found"
+    },
+    {
+      "t": 25.889281100004155,
+      "frame_id": 755,
+      "player": null,
+      "player_velocity": null,
+      "camera_offset": null,
+      "reason": "player_not_found"
+    },
+    {
+      "t": 25.923507500003325,
+      "frame_id": 756,
+      "player": null,
+      "player_velocity": null,
+      "camera_offset": null,
+      "reason": "player_not_found"
+    },
+    {
+      "t": 25.96715419999964,
+      "frame_id": 757,
+      "player": null,
+      "player_velocity": null,
+      "camera_offset": null,
+      "reason": "player_not_found"
+    },
+    {
+      "t": 25.98522320000484,
+      "frame_id": 758,
+      "player": null,
+      "player_velocity": null,
+      "camera_offset": null,
+      "reason": "player_not_found"
+    },
+    {
+      "t": 26.033362000001944,
+      "frame_id": 759,
+      "player": [
+        156.0,
+        543
+      ],
+      "player_velocity": [
+        0,
+        0
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.047434899999644,
+      "frame_id": 760,
+      "player": [
+        156.0,
+        552
+      ],
+      "player_velocity": [
+        0.0,
+        294.48045465660107
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.106428400002187,
+      "frame_id": 761,
+      "player": [
+        156.0,
+        573
+      ],
+      "player_velocity": [
+        0.0,
+        457.2513532844542
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.125619000005827,
+      "frame_id": 762,
+      "player": [
+        157.5,
+        587.5
+      ],
+      "player_velocity": [
+        47.98510542158651,
+        463.8560190753363
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.15533680000226,
+      "frame_id": 763,
+      "player": [
+        159.5,
+        593.5
+      ],
+      "player_velocity": [
+        65.28501806327748,
+        195.8550541898324
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.187173300000723,
+      "frame_id": 764,
+      "player": [
+        159.5,
+        590.5
+      ],
+      "player_velocity": [
+        0.0,
+        -95.94688380278261
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.233180100003665,
+      "frame_id": 765,
+      "player": [
+        159.5,
+        588.5
+      ],
+      "player_velocity": [
+        0.0,
+        -66.50351138758194
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.24853940000321,
+      "frame_id": 766,
+      "player": [
+        159.5,
+        585.5
+      ],
+      "player_velocity": [
+        0.0,
+        -98.45749918638222
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.28048050000507,
+      "frame_id": 767,
+      "player": [
+        159.5,
+        581.5
+      ],
+      "player_velocity": [
+        0.0,
+        -128.7229078404115
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.325958100002026,
+      "frame_id": 768,
+      "player": [
+        159.5,
+        576.5
+      ],
+      "player_velocity": [
+        0.0,
+        -108.20613701806639
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.367804100002104,
+      "frame_id": 769,
+      "player": [
+        159.5,
+        573.5
+      ],
+      "player_velocity": [
+        0.0,
+        -99.22669331502527
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.402967900001386,
+      "frame_id": 770,
+      "player": [
+        159.5,
+        570.5
+      ],
+      "player_velocity": [
+        0.0,
+        -65.12494219517164
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.41850400000112,
+      "frame_id": 771,
+      "player": [
+        159.5,
+        568.5
+      ],
+      "player_velocity": [
+        0,
+        0
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.448448000002827,
+      "frame_id": 772,
+      "player": [
+        159.5,
+        565.5
+      ],
+      "player_velocity": [
+        0.0,
+        -95.53592467311269
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.50670220000029,
+      "frame_id": 773,
+      "player": [
+        159.5,
+        560.5
+      ],
+      "player_velocity": [
+        0.0,
+        -109.32092030816624
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.524389700003667,
+      "frame_id": 774,
+      "player": [
+        159.5,
+        556.5
+      ],
+      "player_velocity": [
+        0.0,
+        -130.46654838593616
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.555141900003946,
+      "frame_id": 775,
+      "player": [
+        159.5,
+        553.5
+      ],
+      "player_velocity": [
+        0.0,
+        -96.09347973293282
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.586346399999456,
+      "frame_id": 776,
+      "player": [
+        159.5,
+        550.5
+      ],
+      "player_velocity": [
+        0.0,
+        -96.27727856647495
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.6310214000041,
+      "frame_id": 777,
+      "player": [
+        159.5,
+        548.5
+      ],
+      "player_velocity": [
+        0.0,
+        -64.55465358348057
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.649374200002057,
+      "frame_id": 778,
+      "player": [
+        159.5,
+        544.5
+      ],
+      "player_velocity": [
+        0.0,
+        -128.84273455549038
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_catch"
+    },
+    {
+      "t": 26.71108820000518,
+      "frame_id": 779,
+      "player": [
+        159.5,
+        540.5
+      ],
+      "player_velocity": [
+        0.0,
+        -85.8691568736838
+      ],
+      "camera_offset": [
+        380.0,
+        -430.0
+      ],
+      "reason": "rope_retry"
+    }
+  ]
+}

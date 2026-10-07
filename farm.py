@@ -33,6 +33,13 @@ class Config:
 
     # ---------- 节奏（单位：秒，二元组表示随机区间）----------
     attacks_per_side: int = 1             # 每个方向跳攻几下（1=右一下左一下）
+    sweep_right_attacks: int = 10         # 往返扫图：持续向右跳攻次数
+    sweep_left_attacks: int = 10          # 往返扫图：持续向左跳攻次数
+    sweep_cycle_secs: float = .8          # 往返扫图：起跳到下一次起跳的完整周期，方向持续按住
+    sweep_jump_hold_secs: float = .08
+    sweep_jump_rise_secs: float = .12
+    sweep_attack_hold_secs: float = .08
+    sweep_noise_ratio: float = .15        # 往返扫图：按键时序与周期独立随机波动，0 关闭
     jump_hold_secs: tuple = (0.050, 0.090)    # 跳跃键按住时长（至少 50ms，确保 Alt 被注册成跳跃）
     jump_rise_secs: tuple = (0.050, 0.080)    # 起跳后等多久再出招（没跳起来就调大，空中出招太慢就调小）
     key_hold_secs: tuple = (0.030, 0.080)     # 攻击键按住时长

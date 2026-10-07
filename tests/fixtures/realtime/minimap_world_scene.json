@@ -1,0 +1,197 @@
+{
+  "request_id": "5ac70696f3954ad389bb41a83a6d2ed3",
+  "map_name": "猴子森林",
+  "width": 1366,
+  "height": 768,
+  "play_area": [
+    0,
+    0,
+    1366,
+    694
+  ],
+  "player_name_box": [
+    717,
+    411,
+    768,
+    424
+  ],
+  "player_foot_offset": -15,
+  "monster_boxes": [
+    [
+      1096,
+      598,
+      1145,
+      644
+    ]
+  ],
+  "exclude_boxes": [
+    [
+      0,
+      0,
+      127,
+      188
+    ],
+    [
+      1158,
+      28,
+      1366,
+      212
+    ],
+    [
+      0,
+      380,
+      233,
+      440
+    ],
+    [
+      1200,
+      614,
+      1366,
+      694
+    ],
+    [
+      0,
+      514,
+      66,
+      632
+    ]
+  ],
+  "platforms": [
+    {
+      "id": "upper_left_step",
+      "left": 248,
+      "right": 374,
+      "y": 48
+    },
+    {
+      "id": "upper_left_lower",
+      "left": 338,
+      "right": 465,
+      "y": 110
+    },
+    {
+      "id": "crown",
+      "left": 519,
+      "right": 916,
+      "y": 229
+    },
+    {
+      "id": "upper_mid",
+      "left": 609,
+      "right": 735,
+      "y": 290
+    },
+    {
+      "id": "upper_left",
+      "left": 519,
+      "right": 646,
+      "y": 351
+    },
+    {
+      "id": "upper_current",
+      "left": 609,
+      "right": 739,
+      "y": 411
+    },
+    {
+      "id": "left_top",
+      "left": 519,
+      "right": 646,
+      "y": 470
+    },
+    {
+      "id": "center_high",
+      "left": 609,
+      "right": 735,
+      "y": 529
+    },
+    {
+      "id": "left_high",
+      "left": 429,
+      "right": 554,
+      "y": 588
+    },
+    {
+      "id": "refuge_right",
+      "left": 700,
+      "right": 825,
+      "y": 589
+    },
+    {
+      "id": "middle_step",
+      "left": 519,
+      "right": 645,
+      "y": 648
+    },
+    {
+      "id": "left_upper",
+      "left": 0,
+      "right": 285,
+      "y": 470
+    },
+    {
+      "id": "left_mid",
+      "left": 0,
+      "right": 285,
+      "y": 648
+    },
+    {
+      "id": "right_high",
+      "left": 881,
+      "right": 1366,
+      "y": 648
+    }
+  ],
+  "ropes": [
+    {
+      "x": 168,
+      "top": 0,
+      "bottom": 281
+    },
+    {
+      "x": 75,
+      "top": 470,
+      "bottom": 630
+    },
+    {
+      "x": 658,
+      "top": 529,
+      "bottom": 693
+    },
+    {
+      "x": 989,
+      "top": 648,
+      "bottom": 693
+    },
+    {
+      "x": 1241,
+      "top": 648,
+      "bottom": 693
+    },
+    {
+      "x": 169,
+      "top": 648,
+      "bottom": 693
+    }
+  ],
+  "preferred_platforms": [
+    "left_mid",
+    "right_high"
+  ],
+  "confidence": 0.95,
+  "reasoning": "当前上层截图；蓝帽主角在 upper_current 的右端。名字被宠物标签挡住，身份模板使用此前已核实 CatApril 原图，保留帽子和服装校验。 停靠阶段补录屏幕左下叶片平台，几何记录在 parking_geometry_revision.json。",
+  "hud_boxes": [
+    [
+      1200,
+      614,
+      1366,
+      694
+    ],
+    [
+      0,
+      380,
+      233,
+      440
+    ]
+  ]
+}

@@ -31,3 +31,7 @@ build/
 !/dist/MapleFarmUnified-v2.2.1.exe
 !/dist/MapleFarmUnified-v2.2.2.exe
 !/dist/MapleFarmUnified-v2.2.3.exe
+!/dist/MapleFarmUnified-v2.2.6-noise2.exe
+!/dist/gui_config.json
+!/dist/buff_gui_config.json
+!/dist/unified_v226_noise2_smoke_test.json

@@ -17,9 +17,10 @@ from buff_gui import App as BuffApp, DEFAULT_SLOTS
 from autofarm.buffs import parse_slots
 from autofarm.winapi import VK_CODES
 
-VERSION = '2.2.3'
+VERSION = '2.2.6-noise2'
 CONFIG_FILE = 'unified_config.json'
 MODES = {'random_jump': '随机跳攻 · 野猪领地1',
+         'sweep_jump': '往返扫图跳攻 · 持续方向键',
          'rope_archer': '绳边射手 · 猴子沼泽3',
          'platform_guard': '自定义守台 · 用户标定',
          'buff_only': '仅定时 Buff · 手动操作时补技能'}
@@ -79,7 +80,10 @@ class UnifiedApp(ArcherApp):
         for key, value in farm_gui._defaults().items():
             self._var(key, value)
         for key, value in dict(guard_profile='templates/platform_guard_example/profile.json', guard_player_name='', guard_direction='right',
-                               guard_attack_key='shift', guard_attack_range='450', buff_hold_ms='120').items():
+                               guard_attack_key='shift', guard_attack_range='450', buff_hold_ms='120',
+                               sweep_right_attacks='10', sweep_left_attacks='10',
+                               sweep_jump_hold_ms='80', sweep_jump_rise_ms='120',
+                               sweep_attack_hold_ms='80', sweep_cycle_ms='800', sweep_noise_pct='15').items():
             self._var(key, value)
         self.buff_start = tk.BooleanVar(value=True)
         self.potion_on = tk.BooleanVar(value=False)
@@ -96,13 +100,15 @@ class UnifiedApp(ArcherApp):
         self.tabs = ttk.Notebook(self)
         self.tabs.pack(fill='both', expand=True, padx=12)
         self.random_tab = ttk.Frame(self.tabs)
+        self.sweep_tab = ttk.Frame(self.tabs)
         self.archer_tab = ttk.Frame(self.tabs)
         self.buff_tab = ttk.Frame(self.tabs)
         self.guard_tab = ttk.Frame(self.tabs)
-        for tab, name in [(self.random_tab, '随机跳攻'), (self.archer_tab, '绳边射手'),
+        for tab, name in [(self.random_tab, '随机跳攻'), (self.sweep_tab, '往返扫图'), (self.archer_tab, '绳边射手'),
                           (self.guard_tab, '自定义守台'), (self.buff_tab, '定时 Buff')]:
             self.tabs.add(tab, text=name)
         self._random_panel()
+        self._sweep_panel()
         self._archer_panel()
         self._guard_panel()
         self._buff_panel()
@@ -145,6 +151,29 @@ class UnifiedApp(ArcherApp):
         for row, (key, label) in enumerate(farm_gui.PAIR_PARAMS):
             if key != 'buff_pause_secs':
                 self.pair(timing, label, key, row)
+
+    def _sweep_panel(self):
+        panel = self.sweep_tab
+        ttk.Label(panel, text='先按住 →，边走边跳攻指定次数；再按住 ←，边走边跳攻指定次数，循环往返。\n'
+                  '按 2.2.6 的定时结构执行，按键时序和周期每次随机波动；起始位置请放在左侧。',
+                  padding=8).pack(anchor='w')
+        columns = ttk.Frame(panel)
+        columns.pack(fill='x')
+        keys = ttk.LabelFrame(columns, text='按键与每边次数')
+        keys.pack(side='left', fill='both', padx=5)
+        for row, (label, key) in enumerate([('攻击键', 'attack_key'), ('跳跃键', 'jump_key'),
+                ('向右跳攻次数', 'sweep_right_attacks'), ('向左跳攻次数', 'sweep_left_attacks')]):
+            self.entry(keys, label, key, row, 8)
+        timing = ttk.LabelFrame(columns, text='跳 A 动作周期（毫秒，方向持续按住）')
+        timing.pack(side='left', fill='both', padx=5)
+        for row, (label, key) in enumerate([('跳跃键按住', 'sweep_jump_hold_ms'),
+                ('松跳跃后到攻击', 'sweep_jump_rise_ms'), ('攻击键按住', 'sweep_attack_hold_ms'),
+                ('基础起跳周期', 'sweep_cycle_ms'), ('时间随机波动 %', 'sweep_noise_pct')]):
+            self.entry(timing, label, key, row, 8)
+        ttk.Label(panel, text='默认基础周期 800ms、时间波动 ±15%，设为 0% 恢复固定时序；左右默认各 10 组，次数固定。\n'
+                  '跳跃按住、腾空、攻击按住和周期分别随机；方向持续按住，完成次数立即反向。不喝药；Buff 按开关启用。\n'
+                  'F12 暂停、失焦、停止时松键。按次数折返，不识别地图边缘；修改参数后重新启动生效。',
+                  padding=8).pack(anchor='w')
 
     def _update_left_probability(self, *args):
         try:
@@ -193,7 +222,7 @@ class UnifiedApp(ArcherApp):
         ttk.Checkbutton(first, text='首次开始时先补一次', variable=self.buff_start).pack(side='left')
         ttk.Label(first, text='按住毫秒').pack(side='left', padx=6)
         ttk.Entry(first, textvariable=self.vars['buff_hold_ms'], width=6).pack(side='left')
-        ttk.Label(panel, text='仅 Buff 模式总是启用；每行独立计时。修改槽位后点「应用」。\n开始后需 F12 运行且游戏在前台；射手 / 守台会先松开攻击，等 150ms 再施放。', padding=8).pack(anchor='w')
+        ttk.Label(panel, text='仅 Buff 模式总是启用；每行独立计时。修改槽位后点「应用」。\n开始后需 F12 运行且游戏在前台；扫图 / 射手 / 守台先松开按键，等 150ms 再施放。', padding=8).pack(anchor='w')
         ttk.Label(panel, text='按键          间隔最小秒  间隔最大秒  停顿最小秒  停顿最大秒', padding=8).pack(anchor='w')
         canvas = tk.Canvas(panel, height=120, highlightthickness=0)
         canvas.pack(fill='both', expand=True, padx=8)
@@ -398,7 +427,7 @@ class UnifiedApp(ArcherApp):
     def _select_mode(self, event=None):
         plan = next(k for k, label in MODES.items() if label == self.mode_label.get())
         self.vars['plan'].set(plan)
-        self.tabs.select({'random_jump': self.random_tab, 'rope_archer': self.archer_tab,
+        self.tabs.select({'random_jump': self.random_tab, 'sweep_jump': self.sweep_tab, 'rope_archer': self.archer_tab,
                           'platform_guard': self.guard_tab, 'buff_only': self.buff_tab}[plan])
 
     def _load(self):
@@ -425,7 +454,7 @@ class UnifiedApp(ArcherApp):
         self._select_mode()
         self._template_loading = False
         self._refresh_name_template()
-        self.title(f'冒险岛统一助手 v{VERSION} · 自定义守台 / 随机跳攻 / 绳边射手 / Buff')
+        self.title(f'冒险岛统一助手 v{VERSION} · 往返扫图 / 自定义守台 / 随机跳攻 / 绳边射手 / Buff')
         self._log(f'[版本] 统一助手 v{VERSION}；配置：{Path(CONFIG_FILE).resolve()}')
         self._log(f'[程序] {Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve()}')
 
@@ -443,6 +472,40 @@ class UnifiedApp(ArcherApp):
         cfg = farm_gui.App._build_config(self)
         if cfg.plan not in MODES:
             raise ValueError('请选择有效的运行模式')
+        try:
+            right_count = int(self.vars['sweep_right_attacks'].get())
+            left_count = int(self.vars['sweep_left_attacks'].get())
+        except ValueError:
+            raise ValueError('往返扫图左右攻击次数必须是 1~1000 的整数') from None
+        if not all(1 <= n <= 1000 for n in (right_count, left_count)):
+            raise ValueError('往返扫图左右攻击次数必须是 1~1000 的整数')
+        if cfg.plan == 'sweep_jump':
+            keys = (cfg.attack_key, cfg.jump_key)
+            if keys[0] == keys[1] or any(k not in VK_CODES or k in ('left', 'right', 'up', 'down', 'f11', 'f12') for k in keys):
+                raise ValueError('跳跃 / 攻击键必须不同，且不能使用方向键')
+            timing = []
+            for key, label, lo, hi in [('sweep_jump_hold_ms', '跳跃键按住', 60, 250),
+                    ('sweep_jump_rise_ms', '松跳跃后到攻击', 80, 300),
+                    ('sweep_attack_hold_ms', '攻击键按住', 40, 250),
+                    ('sweep_cycle_ms', '基础起跳周期', 600, 3000)]:
+                value = float(self.vars[key].get())
+                if not math.isfinite(value) or not lo <= value <= hi:
+                    raise ValueError(f'{label} 必须在 {lo}~{hi} 毫秒之间')
+                timing.append(value / 1000)
+            if timing[3] < sum(timing[:3]) + .1:
+                raise ValueError('起跳周期必须覆盖跳跃、腾空、攻击及至少 100ms 的恢复时间')
+            noise = float(self.vars['sweep_noise_pct'].get()) / 100
+            if not math.isfinite(noise) or not 0 <= noise <= .3:
+                raise ValueError('扫图时间随机波动必须在 0~30% 之间')
+            slots, hold = self._buff_options()
+            return replace(cfg, sweep_right_attacks=right_count, sweep_left_attacks=left_count,
+                           sweep_jump_hold_secs=timing[0], sweep_jump_rise_secs=timing[1],
+                           sweep_attack_hold_secs=timing[2], sweep_cycle_secs=timing[3],
+                           sweep_noise_ratio=noise,
+                           potion_key=None, buff_key=None, buff_slots=slots, buff_hold_secs=hold,
+                           buff_start_immediately=self.buff_start.get(),
+                           move_secs=(0, 0), settle_secs=(0, 0), attack_gap_secs=(0, 0), switch_gap_secs=(0, 0),
+                           extra_attack_prob=0, hop_prob=0, idle_prob=0)
         if not math.isfinite(cfg.right_attack_prob) or not 0 <= cfg.right_attack_prob <= 1:
             raise ValueError('向右攻击概率必须在 0~100% 之间，向左概率自动补足到 100%')
         for key in (cfg.attack_key, cfg.jump_key, cfg.potion_key):
@@ -463,6 +526,7 @@ class UnifiedApp(ArcherApp):
         if direction not in ('right', 'left', 'both') or not math.isfinite(reach) or not 50 <= reach <= 1000:
             raise ValueError('守台方向无效，或射程不在 50~1000 像素范围内')
         return replace(cfg, buff_key=None, buff_slots=slots, buff_hold_secs=hold,
+                       sweep_right_attacks=right_count, sweep_left_attacks=left_count,
                        buff_start_immediately=self.buff_start.get(), vision_enabled=True,
                        guard_profile=self.vars['guard_profile'].get(), guard_player_name=self.vars['guard_player_name'].get(),
                        guard_direction=direction, guard_attack_key=attack, guard_attack_range=reach)
@@ -477,6 +541,8 @@ class UnifiedApp(ArcherApp):
             messagebox.showerror('无法保存配置', str(error), parent=self)
         if self.alive:
             self.mode_box.configure(state='disabled')
+            if self.vars['plan'].get() == 'sweep_jump':
+                self._log('[往返扫图] 连续跳 A，按次数立即反向；Buff 到期后在按键组之间施放')
             self._log('[Buff] ' + ('已启用，F12 运行后执行' if self.buff_on.get() or self.vars['plan'].get() == 'buff_only' else '未启用：可到定时 Buff 页勾选'))
 
     def _on_done(self):
@@ -490,9 +556,73 @@ class UnifiedApp(ArcherApp):
         super().on_test_vision()
 
 
+def self_test(report_path):
+    """Packaged GUI/config smoke test in isolation; never creates a game Bot."""
+    import tempfile
+    import traceback
+    report_path = Path(report_path).resolve()
+    previous = Path.cwd()
+    app = None
+    report = {'version': VERSION, 'ok': False, 'game_inputs_sent': False}
+    try:
+        with tempfile.TemporaryDirectory(prefix='maple_unified_test_') as folder:
+            try:
+                os.chdir(folder)
+                app = UnifiedApp()
+                app.withdraw()
+                app.update()
+                for mode, label in MODES.items():
+                    app.mode_label.set(label)
+                    app._select_mode()
+                    assert app._build_config().plan == mode
+                app.mode_label.set(MODES['sweep_jump'])
+                app._select_mode()
+                app.vars['sweep_right_attacks'].set('12')
+                app.vars['sweep_left_attacks'].set('9')
+                app.buff_on.set(True)
+                app.buff_start.set(True)
+                app.vars['buff_hold_ms'].set('50')
+                app._save()
+                app.destroy()
+                app = UnifiedApp()
+                app.withdraw()
+                app.update()
+                cfg = app._build_config()
+                assert (cfg.plan, cfg.sweep_right_attacks, cfg.sweep_left_attacks) == ('sweep_jump', 12, 9)
+                assert app.tabs.select() == str(app.sweep_tab)
+                assert cfg.plan in farm_gui.plans.PLANS
+                assert cfg.potion_key is None and len(cfg.buff_slots) == 2
+                assert cfg.buff_start_immediately and cfg.buff_hold_secs == .05
+                assert cfg.attack_gap_secs == cfg.switch_gap_secs == (0, 0)
+                assert cfg.sweep_cycle_secs == .8
+                assert cfg.sweep_noise_ratio == .15
+                report.update(ok=True, modes=list(MODES), config_roundtrip=True,
+                              sweep_buff_enabled=True,
+                              sweep_cycle_ms=cfg.sweep_cycle_secs * 1000,
+                              base_version='2.2.6', sweep_noise_pct=cfg.sweep_noise_ratio * 100,
+                              sweep_right_attacks=cfg.sweep_right_attacks, sweep_left_attacks=cfg.sweep_left_attacks,
+                              window_size=[app.winfo_reqwidth(), app.winfo_reqheight()])
+            finally:
+                if app is not None:
+                    app.destroy()
+                    app = None
+                os.chdir(previous)
+    except Exception:
+        report['ok'] = False
+        report['error'] = traceback.format_exc()
+    finally:
+        if app is not None:
+            app.destroy()
+        os.chdir(previous)
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+    return 0 if report['ok'] else 1
+
+
 def main():
     os.chdir(Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent)
     ctypes.windll.user32.SetProcessDPIAware()
+    if len(sys.argv) == 3 and sys.argv[1] == '--self-test':
+        raise SystemExit(self_test(sys.argv[2]))
     UnifiedApp().mainloop()
 
 

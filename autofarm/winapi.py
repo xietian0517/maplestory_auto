@@ -11,6 +11,7 @@ from ctypes import wintypes as W
 
 KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
+INPUT_SOURCE_TAG = 0x4D584441  # Audit marker; no change to the key itself.
 
 # 进程权限查询用
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -174,6 +175,6 @@ class WinApi:
         flags = (KEYEVENTF_EXTENDEDKEY if name in EXTENDED_KEYS else 0)
         if up:
             flags |= KEYEVENTF_KEYUP
-        event = _Input(type=1, value=_InputUnion(ki=_KeyboardInput(vk, scan, flags, 0, 0)))
+        event = _Input(type=1, value=_InputUnion(ki=_KeyboardInput(vk, scan, flags, 0, INPUT_SOURCE_TAG)))
         if self.u.SendInput(1, C.byref(event), C.sizeof(_Input)) != 1:
             raise RuntimeError(f'SendInput 失败：{C.get_last_error()}')

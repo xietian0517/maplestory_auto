@@ -93,3 +93,39 @@ class AppearanceTracker:
         if not candidates: return None
         if len(candidates)>1 and candidates[0][3]-candidates[1][3]<.06: return None
         return candidates[0][:3]
+
+    def occluded_head(self,image,area):
+        """Distinctive hat AND face for a sprite whose lower body is hidden.
+
+        This stricter fallback is never used for pose learning. The caller must
+        confirm the same candidate in consecutive observations before acting.
+        """
+        x1,y1,x2,y2=area; roi=image[y1:y2,x1:x2]; candidates=[]
+        if roi.shape[0]<32 or roi.shape[1]<28:return None
+        small=cv2.resize(cv2.cvtColor(roi,cv2.COLOR_BGR2GRAY),None,fx=.5,fy=.5)
+        for pose in self.poses:
+            for p in (pose,cv2.flip(pose,1)):
+                # The outer columns contain scenery and move differently from
+                # the sprite. A tighter interior retains the hat emblem and
+                # both eyes; require stronger independent colour matches.
+                head=p[6:38,12:40]
+                reduced=cv2.resize(cv2.cvtColor(head,cv2.COLOR_BGR2GRAY),None,fx=.5,fy=.5)
+                scores=cv2.matchTemplate(small,reduced,cv2.TM_CCOEFF_NORMED)
+                for _ in range(3):
+                    _,coarse,_,(sx,sy)=cv2.minMaxLoc(scores)
+                    if coarse<.60:break
+                    scores[max(0,sy-12):sy+13,max(0,sx-12):sx+13]=-1
+                    rx=max(0,sx*2-3);ry=max(0,sy*2-3)
+                    nearby=roi[ry:min(roi.shape[0],sy*2+36),rx:min(roi.shape[1],sx*2+32)]
+                    if nearby.shape[0]<32 or nearby.shape[1]<28:continue
+                    _,score,_,(tx,ty)=cv2.minMaxLoc(cv2.matchTemplate(nearby,head,cv2.TM_CCOEFF_NORMED))
+                    if score<.90:continue
+                    x,y=rx+tx,ry+ty
+                    patch=roi[y:y+32,x:x+28]
+                    hat=float(cv2.matchTemplate(patch[:14],head[:14],cv2.TM_CCOEFF_NORMED)[0,0])
+                    face=float(cv2.matchTemplate(patch[14:],head[14:],cv2.TM_CCOEFF_NORMED)[0,0])
+                    if hat<.88 or face<.89:continue
+                    candidate=(x1+x+14,y1+y+59,float(score))
+                    if not any(abs(c[0]-candidate[0])<12 and abs(c[1]-candidate[1])<12 for c in candidates):
+                        candidates.append(candidate)
+        return candidates[0] if len(candidates)==1 else None

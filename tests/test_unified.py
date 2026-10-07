@@ -260,3 +260,67 @@ class UnifiedGuiTests(TestCase):
         app._apply_buffs()
         app.bot.buff_commands.get_nowait()
         self.assertEqual(app.bot.buff_commands.get_nowait(), ('replace', ()))
+
+    def test_sweep_mode_counts_roundtrip_and_validation(self):
+        from unified_gui import MODES
+        app = self.app()
+        app.mode_label.set(MODES['sweep_jump'])
+        app._select_mode()
+        self.assertEqual(app.tabs.select(), str(app.sweep_tab))
+        self.assertEqual(app._build_config().sweep_right_attacks, 10)
+        app.vars['sweep_right_attacks'].set('12')
+        app.vars['sweep_left_attacks'].set('9')
+        app.vars['sweep_cycle_ms'].set('900')
+        app.vars['sweep_noise_pct'].set('20')
+        app._save()
+        restarted = self.app()
+        cfg = restarted._build_config()
+        self.assertEqual((cfg.plan, cfg.sweep_right_attacks, cfg.sweep_left_attacks), ('sweep_jump', 12, 9))
+        self.assertEqual(cfg.sweep_cycle_secs, .9)
+        self.assertEqual(cfg.sweep_noise_ratio, .2)
+        self.assertEqual(cfg.sweep_jump_hold_secs, .08)
+        self.assertEqual(cfg.sweep_jump_rise_secs, .12)
+        app.buff_on.set(True)
+        app.potion_on.set(True)
+        app.vars['potion_key'].set('end')
+        cfg = app._build_config()
+        self.assertEqual(len(cfg.buff_slots), 2)
+        self.assertIsNone(cfg.potion_key)
+        self.assertEqual(cfg.attack_gap_secs, (0, 0))
+        self.assertEqual(cfg.switch_gap_secs, (0, 0))
+        app.alive = True
+        app.bot = mock.Mock()
+        app.bot.buff_commands = queue.Queue()
+        app._apply_buffs()
+        self.assertEqual(app.bot.buff_commands.get_nowait(), ('hold', .12))
+        self.assertEqual(app.bot.buff_commands.get_nowait(), ('replace', cfg.buff_slots))
+        app._buff_now()
+        self.assertEqual(app.bot.buff_commands.get_nowait(), ('hold', .12))
+        self.assertEqual(app.bot.buff_commands.get_nowait(), ('replace', cfg.buff_slots))
+        self.assertEqual(app.bot.buff_commands.get_nowait(), ('now', None))
+        app.buff_on.set(False)
+        app._apply_buffs()
+        app.bot.buff_commands.get_nowait()
+        self.assertEqual(app.bot.buff_commands.get_nowait(), ('replace', ()))
+        for key, values in [('sweep_cycle_ms', ('0', '599', '3001', 'nan')),
+                            ('sweep_noise_pct', ('-1', '31', 'nan', 'inf', '')),
+                            ('sweep_jump_hold_ms', ('0', '40', '251')),
+                            ('sweep_jump_rise_ms', ('0', '30', '301')),
+                            ('sweep_attack_hold_ms', ('0', '30', '251'))]:
+            previous = app.vars[key].get()
+            for value in values:
+                app.vars[key].set(value)
+                with self.assertRaises(ValueError):
+                    app._build_config()
+            app.vars[key].set(previous)
+        for key in ('sweep_right_attacks', 'sweep_left_attacks'):
+            for value in ('0', '-1', '1001', '2.5', 'abc', ''):
+                app.vars[key].set(value)
+                with self.assertRaises(ValueError):
+                    app._build_config()
+            app.vars[key].set('10')
+        for attack, jump in [('left', 'alt'), ('shift', 'right'), ('alt', 'alt')]:
+            app.vars['attack_key'].set(attack)
+            app.vars['jump_key'].set(jump)
+            with self.assertRaises(ValueError):
+                app._build_config()

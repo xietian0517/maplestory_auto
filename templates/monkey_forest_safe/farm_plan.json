@@ -1,0 +1,62 @@
+{
+  "anchor": "left_high",
+  "request_id": "5ac70696f3954ad389bb41a83a6d2ed3",
+  "quiet_seconds": 6,
+  "standing_burst_seconds": 1.4,
+  "continue_short_occlusion": true,
+  "prefer_firing_anchor": true,
+  "refresh_attack_facing": false,
+  "sustain_farming": true,
+  "safe_platforms": [
+    "upper_left_step",
+    "upper_left_lower",
+    "crown",
+    "upper_mid",
+    "upper_left",
+    "upper_current",
+    "left_top",
+    "center_high",
+    "left_high",
+    "refuge_right",
+    "middle_step",
+    "observed_16",
+    "observed_17",
+    "reviewed_right_upper_leaf",
+    "reviewed_left_pod"
+  ],
+  "firing_platforms": [
+    "upper_current",
+    "left_top",
+    "left_high",
+    "refuge_right",
+    "middle_step",
+    "observed_17",
+    "reviewed_right_upper_leaf",
+    "reviewed_left_pod"
+  ],
+  "reviewed_firing_examples": {
+    "left_top": {
+      "direction": "left",
+      "target": "left_upper"
+    },
+    "left_high": {
+      "direction": "left",
+      "target": "left_mid"
+    },
+    "refuge_right": {
+      "direction": "right",
+      "target": "right_high"
+    },
+    "observed_17": {
+      "direction": "left",
+      "target": "observed_18"
+    }
+  },
+  "combat_platforms": [
+    "left_upper",
+    "left_mid",
+    "right_high",
+    "observed_18",
+    "observed_20"
+  ]
+}

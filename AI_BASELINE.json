@@ -1,0 +1,8 @@
+{
+  "baseline": "0.4.4",
+  "active_source": "variants/v044_ai",
+  "release": "releases/v0.4.4-ai2",
+  "mode": "AI anchor strategy + original v0.4.4 local tactics",
+  "user_selected_baseline": true,
+  "ten_minute_exp_confirmed": false
+}

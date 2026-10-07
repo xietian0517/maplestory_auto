@@ -9,7 +9,7 @@ from autofarm.realtime.model import Actor,Box,Decision,MotionProfile,Observation
 from autofarm.realtime.control import Controller,LeasedKeys,graph,route
 from autofarm.realtime.perception import Camera,Frame,GroundedVision
 from autofarm.realtime.semantic import atomic_json,load_request,make_request
-from autofarm.realtime.runtime import Metrics
+from autofarm.realtime.runtime import Metrics,attack_hold_seconds
 
 
 def scene_data():
@@ -48,6 +48,31 @@ class SceneTests(unittest.TestCase):
 
 
 class ControlTests(unittest.TestCase):
+    def test_direct_attack_holds_without_a_gap_or_jump(self):
+        c=Controller(); c.direct_attacks=True
+        o=observation(monster_x=400,time=1)
+        d=c.orient_attack(o,c.decide(o,1),1)
+        self.assertEqual(d.keys,{'right'})
+        self.assertEqual(c.direct_hold_until,0)
+        c.acknowledge(d,1)
+        o=observation(monster_x=400,time=1.07)
+        d=c.orient_attack(o,c.decide(o,1.07),1.07)
+        self.assertEqual(d.reason,'direct_attack_start')
+        c.acknowledge(d,1.07)
+        for t in (1.1,1.4,1.8,2.2,2.46):
+            o=observation(monster_x=400,time=t)
+            d=c.orient_attack(o,c.decide(o,t),t)
+            self.assertEqual(d.keys,{'shift'})
+            c.acknowledge(d,t)
+            self.assertIsNone(c.jump_combat)
+        o=observation(time=2.48)
+        self.assertFalse(c.decide(o,2.48).keys)
+
+    def test_direct_hold_still_releases_on_stale_frame(self):
+        c=Controller(); c.direct_attacks=True; c.last_epoch=1
+        c.direct_hold_until=3
+        self.assertFalse(c.decide(observation(time=1),1.2).keys)
+
     def test_turn_then_attack_then_target_disappears(self):
         c=Controller(); self.assertEqual(c.decide(observation(),1.01).reason,'turn')
         self.assertEqual(c.decide(observation(time=1.05),1.06).keys,frozenset({'shift'}))
@@ -57,10 +82,15 @@ class ControlTests(unittest.TestCase):
     def test_wrong_height_not_attacked(self):
         o=observation(); o.monsters=[Actor(Box(460,100,500,140),.95)]
         self.assertFalse(Controller().decide(o,1.01).keys)
-    def test_near_enemy_faces_target_then_jumps_before_attacking(self):
+    def test_near_enemy_is_handled_on_foot_instead_of_jumping(self):
+        # 跳A 已禁用：25px 已进入近战判定，站立路径先同层让出射击距离，
+        # 不再起跳对齐，也不会留下悬空的跳A 状态。
         c=Controller()
-        self.assertEqual(c.decide(observation(monster_x=325),1.01).reason,'jump_attack_turn')
-        self.assertEqual(c.decide(observation(monster_x=325,time=1.07),1.07).keys,{'alt'})
+        first=c.decide(observation(monster_x=325),1.01)
+        self.assertEqual(first.reason,'retreat');self.assertEqual(first.keys,{'left'})
+        self.assertIsNone(c.jump_combat)
+        second=c.decide(observation(monster_x=325,time=1.07),1.07)
+        self.assertIsNone(c.jump_combat);self.assertNotIn('alt',second.keys)
     def test_platform_edge_recovers(self):
         self.assertEqual(Controller().decide(observation(x=12),1.01).keys,frozenset({'right'}))
     def test_floor_unknown_waits_without_a_target(self):
@@ -202,6 +232,45 @@ class LeaseTests(unittest.TestCase):
     def test_state_change_releases_previous(self):
         self.keys.apply({'left'},1,0); self.keys.apply({'shift'},1,0)
         self.assertEqual(self.adapter.events,[('left',False),('left',True),('shift',False)])
+    def test_hold_keeps_a_committed_attack_through_a_late_frame(self):
+        self.keys.apply({'shift'},1,0,holds={'shift':.3})
+        self.t=1.07;self.keys.check()
+        self.assertEqual(self.keys.held,{'shift'})  # Late frame may not cut the attack.
+        self.assertEqual(self.adapter.events,[('shift',False)])
+    def test_hold_releases_once_it_elapses_without_a_new_request(self):
+        self.keys.apply({'shift'},1,0,holds={'shift':.3})
+        self.t=1.301;self.keys.check()
+        self.assertFalse(self.keys.held)
+        self.assertEqual(self.adapter.events,[('shift',False),('shift',True)])
+    def test_rolling_hold_renews_without_repeating_keydowns(self):
+        self.keys.apply({'shift'},1,0,holds={'shift':.3})
+        self.t=1.2;self.keys.apply({'shift'},1.2,0,holds={'shift':.3})
+        self.t=1.45;self.keys.check()
+        self.assertEqual(self.keys.held,{'shift'})
+        self.assertEqual(self.adapter.events,[('shift',False)])
+    def test_lapsed_hold_can_be_pressed_again(self):
+        self.keys.apply({'shift'},1,0,holds={'shift':.3})
+        self.t=1.301;self.keys.check();self.assertFalse(self.keys.held)
+        self.t=1.31;self.keys.apply({'shift'},1.31,0,holds={'shift':.3})
+        self.assertEqual(self.keys.held,{'shift'})
+    def test_focus_loss_releases_a_held_attack_immediately(self):
+        self.keys.apply({'shift'},1,0,holds={'shift':.3})
+        self.adapter.focus=False;self.keys.check()
+        self.assertFalse(self.keys.held)
+        self.assertEqual(self.adapter.events,[('shift',False),('shift',True)])
+    def test_invalid_holds_are_rejected(self):
+        with self.assertRaises(ValueError): self.keys.apply({'shift'},1,0,holds={'shift':.01})
+        with self.assertRaises(ValueError): self.keys.apply({'shift'},1,0,holds={'shift':2})
+        with self.assertRaises(ValueError): self.keys.apply({'shift'},1,0,holds={'alt':.3})
+    def test_attack_hold_default_and_validator(self):
+        default=Controller().attack_hold_seconds
+        self.assertTrue(LeasedKeys.HOLD_MIN<=default<=LeasedKeys.HOLD_MAX)
+        self.assertEqual(attack_hold_seconds(None),None)
+        self.assertEqual(attack_hold_seconds(0),0)
+        self.assertEqual(attack_hold_seconds(.3),.3)
+        self.assertEqual(attack_hold_seconds(None,.3),.3)
+        for bad in (-1,LeasedKeys.HOLD_MIN-.01,LeasedKeys.HOLD_MAX+.01,'0.3',True):
+            with self.assertRaises(ValueError): attack_hold_seconds(bad)
 
 
 class VisionTests(unittest.TestCase):
@@ -211,16 +280,16 @@ class VisionTests(unittest.TestCase):
         v=GroundedVision(Scene.parse(data,'test',640,400),image)
         o=v.observe(Frame(1,1,1,image,True,()))
         self.assertEqual(o.monsters,[])
-    def test_seed_grounding_and_missing_name(self):
+    def test_visible_name_without_calibrated_minimap_cannot_locate_player(self):
         rng=np.random.default_rng(7)
         image=rng.integers(0,256,(400,640,3),dtype=np.uint8)
         scene=Scene.parse(scene_data(),'test',640,400)
         vision=GroundedVision(scene,image)
         o=vision.observe(Frame(1,1,1.001,image,True,(0,0,640,400)))
-        self.assertIsNotNone(o.player); self.assertTrue(o.monsters)
+        self.assertIsNone(o.player); self.assertEqual(o.reason,'minimap_uncalibrated')
         changed=image.copy(); changed[230:320,285:347]=0
         o=vision.observe(Frame(2,1.03,1.031,changed,True,(0,0,640,400)))
-        self.assertIsNone(o.player); self.assertEqual(o.reason,'player_not_found')
+        self.assertIsNone(o.player); self.assertEqual(o.reason,'minimap_uncalibrated')
     def test_resize_invalidates_vision(self):
         rng=np.random.default_rng(2); image=rng.integers(0,256,(400,640,3),dtype=np.uint8)
         v=GroundedVision(Scene.parse(scene_data(),'test',640,400),image)

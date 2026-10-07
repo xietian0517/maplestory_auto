@@ -6,7 +6,7 @@ from .model import Platform
 
 class LocalTerrain:
     def __init__(self,seed,platforms):
-        self.tiles=[]; self.extensions={}; self.last_scan=-1
+        self.tiles=[]; self.extensions={}; self.last_scan=-1; self.stable_support=None
         for p in sorted(platforms,key=lambda q:q.right-q.left,reverse=True)[:2]:
             y=round(p.y)+4
             for x in np.linspace(p.left+8,p.right-32,6):
@@ -14,7 +14,7 @@ class LocalTerrain:
                 if tile.shape==(18,24,3) and tile.std()>15:
                     self.tiles.append((tile.copy(),cv2.cvtColor(tile,cv2.COLOR_BGR2GRAY)))
 
-    def support(self,image,cx,foot):
+    def support(self,image,cx,foot,bridge_player=False):
         x1=max(0,round(cx-240)); x2=min(image.shape[1],round(cx+240))
         y1=max(0,round(foot-10)); y2=min(image.shape[0],round(foot+38))
         roi=image[y1:y2,x1:x2]
@@ -35,6 +35,18 @@ class LocalTerrain:
             for a,b in spans:
                 if groups and a-groups[-1][1]<=10: groups[-1][1]=max(b,groups[-1][1])
                 else: groups.append([a,b])
+            # A stable standing character's nameplate hides the wood immediately
+            # below their feet. Bridge only that small centred occlusion, with
+            # separately matched support on BOTH sides; never arbitrary gaps.
+            if bridge_player:
+                merged=[]
+                for a,b in groups:
+                    if (merged and merged[-1][1]<cx<a and a-merged[-1][1]<=85
+                            and cx-merged[-1][1]<=45 and a-cx<=45
+                            and merged[-1][1]-merged[-1][0]>=48 and b-a>=48):
+                        merged[-1][1]=b
+                    else:merged.append([a,b])
+                groups=merged
             for a,b in groups:
                 if b-a>=48 and a<=cx<=b and abs(row-foot)<=12:
                     candidates.append((a,b,row))
@@ -42,6 +54,11 @@ class LocalTerrain:
 
     def update(self,image,player,platforms,offset,now):
         dx,dy=offset
+        world=(player.box.cx-dx,player.box.y2-dy)
+        if (abs(player.vy)>=40 or self.stable_support is None
+                or max(abs(world[i]-self.stable_support[i]) for i in (0,1))>5):
+            self.stable_support=(*world,now)
+        stable=now-self.stable_support[2]>=.28 and player.confidence>=.85
         current={p.id:p for p in platforms}
         for key,p in self.extensions.items():
             current[key]=Platform(key,p.left+dx,p.right+dx,p.y+dy)
@@ -49,7 +66,7 @@ class LocalTerrain:
             near=[p for p in current.values() if p.left<=player.box.cx<=p.right and abs(p.y-player.box.y2)<16]
             if not near or min(player.box.cx-near[0].left,near[0].right-player.box.cx)<80:
                 self.last_scan=now
-                found=self.support(image,player.box.cx,player.box.y2)
+                found=self.support(image,player.box.cx,player.box.y2,bridge_player=stable)
                 if found:
                     a,b,y=found
                     overlaps=[p for p in current.values() if abs(p.y-y)<10 and min(p.right,b)>max(p.left,a)]

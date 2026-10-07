@@ -3,7 +3,10 @@ from .model import Decision
 
 
 class JumpAttack:
-    EARLY_JUMP_HOLD=.040
+    # Human demonstration: median jump-down to Shift-down is 131ms. The
+    # previous 40ms hold yielded roughly 93ms live; try 70ms under the same
+    # observed release gate. Outcome still requires live EXP validation.
+    EARLY_JUMP_HOLD=.070
     EARLY_RELEASE_GAP=.030
     EARLY_FIRE_WINDOW=.180
 
@@ -72,15 +75,17 @@ class JumpAttack:
             keys.add(face); return Decision(frozenset(keys),'jump_attack_turn')
         if self.shot_this_jump and now<self.press_until and str(target.track_id)==self.shot_target_id:
             keys.add('shift'); return Decision(frozenset(keys),'jump_attack_hold',str(target.track_id))
-        # random_jump: release Alt, then wait 30ms before an early attack.
-        # This path does not wait for a delayed screenshot to prove takeoff.
-        early_ready=(early and elapsed>=self.EARLY_JUMP_HOLD+self.EARLY_RELEASE_GAP
+        # An accepted Alt submission is not proof that the game jumped.
+        # Round 044 fired with only 0.5 px of observed rise. Keep the short
+        # human timing window, but require the same measured ascent gate as
+        # higher targets before issuing the first attack of each jump.
+        early_ready=(early and airborne and elapsed>=self.EARLY_JUMP_HOLD+self.EARLY_RELEASE_GAP
                      and self.jump_released_at is not None
                      and now-self.jump_released_at>=self.EARLY_RELEASE_GAP
                      and elapsed<=self.EARLY_FIRE_WINDOW and -12<=rise<=60)
         # A delayed but still aligned target may receive a recovery shot. Do
         # not wait an entire jump after narrowly missing the early deadline.
-        recovery_ready=(early and self.EARLY_FIRE_WINDOW<elapsed<=.32 and aligned
+        recovery_ready=(early and airborne and self.EARLY_FIRE_WINDOW<elapsed<=.32 and aligned
                         and -12<=rise<=45 and self.jump_released_at is not None
                         and now-self.jump_released_at>=self.EARLY_RELEASE_GAP)
         ready=(early_ready or recovery_ready) if early else airborne and aligned
@@ -99,6 +104,7 @@ class HasteRefresh:
         from .control import standing_platform
         base=getattr(controller,'base',controller)
         if not o or o.reason or not o.player or not o.motion_valid or now-o.captured_at>=.085: return d
+        if d.reason.startswith('direct_attack_'): return d
         if now<self.hold_until: return Decision(frozenset({'home'}),'haste_hold')
         jump=getattr(base,'jump_combat',None); rope=getattr(base,'rope_climber',None)
         if (now>=self.next_at and standing_platform(o) and abs(o.player.vy)<60

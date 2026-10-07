@@ -13,6 +13,8 @@ from . import vision as V
 from .rope_archer import run as rope_archer
 from .buffs import BuffScheduler, run as buff_only
 from .platform_guard import run as platform_guard
+from .held_input import HeldInput
+from .bot import POLL_SECS
 
 SIDES = ('right', 'left')
 SIDE_CN = {'right': '右', 'left': '左'}
@@ -150,6 +152,114 @@ def random_jump(bot, cfg):
             B.wait(bot, cfg.idle_secs)
 
 
+def sweep_timing_bounds(cfg):
+    """Bound timing variation without shortening key presses below usable limits."""
+    bases = (cfg.sweep_jump_hold_secs, cfg.sweep_jump_rise_secs,
+             cfg.sweep_attack_hold_secs, cfg.sweep_cycle_secs)
+    limits = ((.06, .25), (.08, .3), (.04, .25), (.6, 3))
+    if not all(math.isfinite(v) and lo <= v <= hi for v, (lo, hi) in zip(bases, limits)):
+        raise ValueError('扫图跳 A 时序无效：跳键 60~250ms，腾空 80~300ms，攻击 40~250ms，周期 600~3000ms')
+    if bases[3] < sum(bases[:3]) + .1:
+        raise ValueError('起跳周期必须覆盖跳跃、腾空、攻击及至少 100ms 的恢复时间')
+    noise = cfg.sweep_noise_ratio
+    if not math.isfinite(noise) or not 0 <= noise <= .3:
+        raise ValueError('扫图时间随机波动必须在 0~30% 之间')
+    return tuple((max(lo, value * (1 - noise)), min(hi, value * (1 + noise)))
+                 for value, (lo, hi) in zip(bases, limits))
+
+
+def random_sweep_timing(cfg):
+    bounds = sweep_timing_bounds(cfg)
+    jump, rise, attack, cycle = (lo if lo == hi else random.uniform(lo, hi) for lo, hi in bounds)
+    return jump, rise, attack, max(cycle, jump + rise + attack + .1)
+
+
+class _SweepMotion:
+    """Keep one direction through jump-attacks, releasing it on interruptions."""
+
+    def __init__(self, bot, inputs, side):
+        self.bot, self.inputs, self.side = bot, inputs, side
+
+    def resume(self, lease=.25):
+        while True:
+            self.inputs.check()
+            self.bot.gate()
+            if self.inputs.apply(self.side, time.monotonic() + lease, self.inputs.epoch):
+                return
+
+    def wait(self, seconds):
+        epoch = self.inputs.epoch
+        remaining = seconds
+        while remaining > 0:
+            self.resume()
+            chunk = min(POLL_SECS, remaining)
+            time.sleep(chunk)
+            self.inputs.check()
+            if self.inputs.key == self.side:
+                remaining -= chunk
+        return self.inputs.epoch != epoch
+
+    def tap(self, key, seconds, expected_epoch=None):
+        # try_tap polls during the press; the direction watcher also checks focus.
+        self.resume(seconds + .25)
+        epoch = self.inputs.epoch
+        if expected_epoch is not None and epoch != expected_epoch:
+            return False
+        try:
+            completed = self.bot.try_tap(key, seconds)
+        finally:
+            self.inputs.check()
+        return completed and self.inputs.epoch == epoch and self.inputs.key == self.side
+
+    def jump_attack(self, cfg):
+        self.resume()
+        jump, rise, attack, cycle = random_sweep_timing(cfg)
+        started = time.monotonic()
+        try:
+            if not self.tap(cfg.jump_key, jump):
+                return False
+            epoch = self.inputs.epoch
+            if self.wait(rise):
+                return False
+            return self.tap(cfg.attack_key, attack, epoch)
+        finally:
+            # A key press is not a completed in-game jump. Keep walking through
+            # the landing/recovery portion before counting or sending another jump.
+            if not self.bot.quitting:
+                self.wait(max(0, cycle - (time.monotonic() - started)))
+
+
+def sweep_jump(bot, cfg):
+    """Held-direction jump-attacks with optional Buffs between completed groups."""
+    counts = {'right': cfg.sweep_right_attacks, 'left': cfg.sweep_left_attacks}
+    if any(type(n) is not int or not 1 <= n <= 1000 for n in counts.values()):
+        raise ValueError('往返扫图左右攻击次数必须是 1~1000 的整数')
+    sweep_timing_bounds(cfg)
+    keys = (cfg.jump_key, cfg.attack_key)
+    if keys[0] == keys[1] or any(k in ('left', 'right', 'up', 'down', 'f11', 'f12') for k in keys):
+        raise ValueError('跳跃 / 攻击键必须不同，且不能使用方向键或 F11 / F12')
+    buff = make_buff(cfg)
+    round_no = 0
+    bot.log(f'[往返扫图] 右 {counts["right"]} 组 → 左 {counts["left"]} 组；持续按方向键，基础周期 {cfg.sweep_cycle_secs * 1000:g}ms，时间波动 ±{cfg.sweep_noise_ratio * 100:g}%')
+    with HeldInput(bot) as inputs:
+        while True:
+            round_no += 1
+            for side in SIDES:
+                motion = _SweepMotion(bot, inputs, side)
+                completed = 0
+                while completed < counts[side]:
+                    bot.gate()
+                    buff.sync(bot)
+                    if buff.due():
+                        inputs.clear()
+                        bot.wait(.15)
+                        maybe_buff(bot, cfg, buff)
+                    if not motion.jump_attack(cfg):
+                        continue
+                    completed += 1
+                    bot.log(f'[第{round_no}轮]{SIDE_CN[side]}跳 A 按键组({completed}/{counts[side]})')
+
+
 def _look(bot, finder, cfg, direction, misses):
     """截一张图判断主角在哪半边，返回 (方向, 是否越界, 连续没认到次数)。"""
     bot.gate()                                   # 暂停/失焦时不截图
@@ -249,6 +359,7 @@ PLANS = {
     'rope_archer': rope_archer,   # 绳边射手：有猴子长按 Shift，击退后持续移动回位
     'fixed_jump': fixed_jump,     # 保存版：固定先右后左各一次
     'random_jump': random_jump,   # 随机版：先后手/次数/纯跳/发呆都有随机
+    'sweep_jump': sweep_jump,     # 往返扫图：持续按右跳攻 N 次，再持续按左跳攻 M 次
     'vision_jump': vision_jump,   # 截图判断版：名字牌定位，偏哪边就先打反方向
     'static_cast': static_cast,   # 站桩施法+微调（示范怎么拼别的打法）
 }

@@ -10,11 +10,16 @@ from .control import Controller
 from .model import MotionProfile
 from .perception import Frame,GroundedVision
 from .semantic import atomic_json,load_scene
+from .world_geometry import restore_world
 
 
 def replay(folder):
+    if (Path(folder)/'policy_trace.jsonl').exists():
+        from .pipeline_replay import replay_trace
+        return replay_trace(folder)
     folder=Path(folder); scene,seed=load_scene(folder)
     cv2.setNumThreads(2); vision=GroundedVision(scene,seed)
+    restore_world(vision,folder)
     motion_path=folder/'motion.json'
     motion=MotionProfile.parse(json.loads(motion_path.read_text(encoding='utf-8'))) if motion_path.exists() else None
     controller=Controller(motion,True); controller.preferred=scene.preferred
@@ -26,6 +31,7 @@ def replay(folder):
             scene_folder=(folder/'replay'/'scenes'/ident).resolve()
             if scene_folder.parent!=(folder/'replay'/'scenes').resolve(): raise ValueError('Invalid recorded scene id')
             scene,seed=load_scene(scene_folder); vision=GroundedVision(scene,seed)
+            restore_world(vision,scene_folder)
             controller=Controller(motion,True); controller.preferred=scene.preferred
         path=(folder/'replay'/r['image']).resolve()
         if path.parent!=(folder/'replay').resolve(): raise ValueError('Replay image outside recording')

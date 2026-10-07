@@ -1,0 +1,23 @@
+{
+  "version": "2.2.6-noise2",
+  "ok": true,
+  "game_inputs_sent": false,
+  "modes": [
+    "random_jump",
+    "sweep_jump",
+    "rope_archer",
+    "platform_guard",
+    "buff_only"
+  ],
+  "config_roundtrip": true,
+  "sweep_buff_enabled": true,
+  "sweep_cycle_ms": 800.0,
+  "base_version": "2.2.6",
+  "sweep_noise_pct": 15.0,
+  "sweep_right_attacks": 12,
+  "sweep_left_attacks": 9,
+  "window_size": [
+    644,
+    727
+  ]
+}

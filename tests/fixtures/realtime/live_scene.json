@@ -1,0 +1,246 @@
+{
+  "request_id": "167852bf1c9843698cdb1eb8a08c08b0",
+  "map_name": "猴子森林",
+  "width": 1366,
+  "height": 768,
+  "play_area": [
+    0,
+    0,
+    1366,
+    694
+  ],
+  "player_name_box": [
+    629,
+    640,
+    680,
+    655
+  ],
+  "player_foot_offset": -14.5,
+  "monster_boxes": [
+    [
+      127,
+      582,
+      178,
+      634
+    ],
+    [
+      437,
+      585,
+      491,
+      634
+    ],
+    [
+      457,
+      337,
+      508,
+      392
+    ],
+    [
+      375,
+      164,
+      418,
+      212
+    ],
+    [
+      460,
+      165,
+      515,
+      212
+    ],
+    [
+      1055,
+      401,
+      1108,
+      453
+    ],
+    [
+      1212,
+      580,
+      1281,
+      633
+    ]
+  ],
+  "exclude_boxes": [
+    [
+      0,
+      0,
+      128,
+      185
+    ],
+    [
+      1165,
+      0,
+      1366,
+      215
+    ],
+    [
+      690,
+      526,
+      751,
+      585
+    ],
+    [
+      613,
+      250,
+      807,
+      380
+    ],
+    [
+      1297,
+      145,
+      1366,
+      250
+    ]
+  ],
+  "platforms": [
+    {
+      "id": "ground",
+      "left": 0,
+      "right": 1366,
+      "y": 637
+    },
+    {
+      "id": "left_mid",
+      "left": 0,
+      "right": 592,
+      "y": 397
+    },
+    {
+      "id": "left_upper",
+      "left": 0,
+      "right": 592,
+      "y": 217
+    },
+    {
+      "id": "left_step",
+      "left": 376,
+      "right": 503,
+      "y": 517
+    },
+    {
+      "id": "center_low",
+      "left": 650,
+      "right": 775,
+      "y": 337
+    },
+    {
+      "id": "center_step",
+      "left": 735,
+      "right": 859,
+      "y": 277
+    },
+    {
+      "id": "center_mid",
+      "left": 829,
+      "right": 953,
+      "y": 217
+    },
+    {
+      "id": "center_upper",
+      "left": 735,
+      "right": 864,
+      "y": 157
+    },
+    {
+      "id": "center_top",
+      "left": 829,
+      "right": 951,
+      "y": 37
+    },
+    {
+      "id": "center_step_top",
+      "left": 912,
+      "right": 1040,
+      "y": 97
+    },
+    {
+      "id": "center_right_top",
+      "left": 1007,
+      "right": 1133,
+      "y": 157
+    },
+    {
+      "id": "right_mid",
+      "left": 829,
+      "right": 1222,
+      "y": 457
+    },
+    {
+      "id": "right_side",
+      "left": 1191,
+      "right": 1366,
+      "y": 397
+    },
+    {
+      "id": "right_upper",
+      "left": 1191,
+      "right": 1366,
+      "y": 217
+    },
+    {
+      "id": "left_top",
+      "left": 0,
+      "right": 592,
+      "y": 37
+    }
+  ],
+  "ropes": [
+    {
+      "x": 380,
+      "top": 37,
+      "bottom": 164
+    },
+    {
+      "x": 174,
+      "top": 217,
+      "bottom": 381
+    },
+    {
+      "x": 474,
+      "top": 217,
+      "bottom": 361
+    },
+    {
+      "x": 85,
+      "top": 397,
+      "bottom": 582
+    },
+    {
+      "x": 535,
+      "top": 397,
+      "bottom": 514
+    },
+    {
+      "x": 467,
+      "top": 517,
+      "bottom": 576
+    },
+    {
+      "x": 965,
+      "top": 97,
+      "bottom": 405
+    },
+    {
+      "x": 870,
+      "top": 457,
+      "bottom": 583
+    },
+    {
+      "x": 1125,
+      "top": 457,
+      "bottom": 578
+    },
+    {
+      "x": 1297,
+      "top": 217,
+      "bottom": 337
+    }
+  ],
+  "preferred_platforms": [
+    "ground",
+    "left_mid",
+    "right_mid"
+  ],
+  "confidence": 0.94,
+  "reasoning": "主角 CatApril 位于地面蓝帽黄衣，猴子宠物在右上并排除。地面与左右中层可作为连续刷怪区域。含可见平台与绳索；所有位置为本请求截图坐标。"
+}
